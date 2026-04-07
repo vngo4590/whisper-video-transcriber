@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+wheels/
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Whisper model cache
+~/.cache/whisper/
+
+# Generated transcription output
+*_transcription.srt
+*_transcription.txt
+
+# PyInstaller
+*.spec
+dist/
+build/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
