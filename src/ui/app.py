@@ -63,9 +63,9 @@ class App:
     # Private — callbacks wired into LeftPanel and Controller
     # ------------------------------------------------------------------
 
-    def _on_transcribe_requested(self, path, model_name, export_format, do_translate):
+    def _on_transcribe_requested(self, path, model_name, export_format, do_translate, max_words_per_line):
         """Received from LeftPanel; forwarded to the controller."""
-        self._controller.run(path, model_name, export_format, do_translate)
+        self._controller.run(path, model_name, export_format, do_translate, max_words_per_line)
 
     def _on_start(self):
         self._left.set_busy(True)

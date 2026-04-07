@@ -54,6 +54,7 @@ class TranscriptionController:
         model_name: str,
         export_format: ExportFormat,
         do_translate: bool,
+        max_words_per_line: int,
     ) -> None:
         """
         Start a background transcription thread.
@@ -64,7 +65,7 @@ class TranscriptionController:
         self._on_start()
         threading.Thread(
             target=self._worker,
-            args=(path, model_name, export_format, do_translate),
+            args=(path, model_name, export_format, do_translate, max_words_per_line),
             daemon=True,
         ).start()
 
@@ -72,9 +73,9 @@ class TranscriptionController:
     # Private
     # ------------------------------------------------------------------
 
-    def _worker(self, path, model_name, export_format, do_translate):
+    def _worker(self, path, model_name, export_format, do_translate, max_words_per_line):
         try:
-            text = self._svc.transcribe(path, model_name, export_format, do_translate)
+            text = self._svc.transcribe(path, model_name, export_format, do_translate, max_words_per_line)
             output_path = self._file.save_transcription(path, text, export_format)
             self._on_success(text, output_path)
         except Exception as exc:

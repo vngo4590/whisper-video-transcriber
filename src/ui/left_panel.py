@@ -15,6 +15,7 @@ from tkinter import filedialog, ttk
 from src import media_utils
 from src.models import (
     DEFAULT_EXPORT_FORMAT,
+    DEFAULT_MAX_WORDS_PER_LINE,
     DEFAULT_MODEL,
     MEDIA_FILE_TYPES,
     WHISPER_MODELS,
@@ -37,6 +38,7 @@ class LeftPanel:
         self._on_transcribe = on_transcribe
         self._selected_path = tk.StringVar()
         self._export_format_var = tk.StringVar(value=DEFAULT_EXPORT_FORMAT.value)
+        self._max_words_var = tk.IntVar(value=DEFAULT_MAX_WORDS_PER_LINE)
         self._translate_var = tk.BooleanVar(value=False)
         self._model_choice = tk.StringVar(value=DEFAULT_MODEL)
 
@@ -56,6 +58,7 @@ class LeftPanel:
         self._model_menu.config(state=state_combo)
         self._radio_srt.config(state=state_button)
         self._radio_plain.config(state=state_button)
+        self._max_words_spinbox.config(state=state_button)
         self._translate_checkbox.config(state=state_button)
 
     def show_loading(self, visible: bool) -> None:
@@ -130,6 +133,19 @@ class LeftPanel:
         )
         self._radio_plain.pack(anchor="w", padx=20, pady=(0, 4))
 
+        words_row = tk.Frame(inner)
+        words_row.pack(anchor="w", padx=20, pady=(0, 6))
+        tk.Label(words_row, text="Max words per line:", font=("Arial", 10)).pack(side="left")
+        self._max_words_spinbox = tk.Spinbox(
+            words_row,
+            from_=1,
+            to=20,
+            textvariable=self._max_words_var,
+            width=4,
+            font=("Arial", 10),
+        )
+        self._max_words_spinbox.pack(side="left", padx=(6, 0))
+
         self._translate_checkbox = tk.Checkbutton(
             inner, text="Translate to English", variable=self._translate_var, font=("Arial", 10)
         )
@@ -202,4 +218,5 @@ class LeftPanel:
             self._model_choice.get(),
             export_format,
             self._translate_var.get(),
+            self._max_words_var.get(),
         )

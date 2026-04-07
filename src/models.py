@@ -14,6 +14,7 @@ class ExportFormat(Enum):
 
 
 DEFAULT_EXPORT_FORMAT = ExportFormat.SRT
+DEFAULT_MAX_WORDS_PER_LINE = 5
 
 WHISPER_MODELS = ["tiny", "base", "small", "medium", "large"]
 DEFAULT_MODEL = "base"
