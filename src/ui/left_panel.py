@@ -63,20 +63,36 @@ class LeftPanel:
     # ------------------------------------------------------------------
 
     def _build(self, parent: tk.Widget, on_transcribe, on_generate_clips) -> None:
+        # Fill the PanedWindow pane completely.
         container = tk.Frame(parent, bg=T.C_SIDEBAR)
-        container.pack(side="left", fill="y")
+        container.pack(fill="both", expand=True)
+        # Stop the container from requesting its children's full content height —
+        # without this the inner frame would push the sidebar taller than the
+        # window and overflow into the right panel.
+        container.pack_propagate(False)
 
         scrollbar = ttk.Scrollbar(container, orient="vertical", style="Sidebar.Vertical.TScrollbar")
-        canvas = tk.Canvas(container, width=T.SIDEBAR_W, bg=T.C_SIDEBAR, highlightthickness=0, bd=0)
+        # No hardcoded width — the canvas fills the pane width via fill="both".
+        canvas = tk.Canvas(container, bg=T.C_SIDEBAR, highlightthickness=0, bd=0)
         canvas.configure(yscrollcommand=scrollbar.set)
         scrollbar.configure(command=canvas.yview)
-        canvas.pack(side="left", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
 
         inner = tk.Frame(canvas, bg=T.C_SIDEBAR)
+        # Update scroll region whenever content height changes.
         inner.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-        canvas.create_window((0, 0), window=inner, anchor="nw")
-        canvas.bind_all("<MouseWheel>", lambda e: canvas.yview_scroll(int(-1 * (e.delta / 120)), "units"))
+        _win = canvas.create_window((0, 0), window=inner, anchor="nw")
+        # Pin inner frame width to the canvas width so no widget bleeds
+        # horizontally beyond the sidebar when the pane is resized.
+        canvas.bind("<Configure>", lambda e: canvas.itemconfig(_win, width=e.width))
+
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+        # Only intercept the mousewheel while the cursor is over the sidebar.
+        container.bind("<Enter>", lambda _: canvas.bind_all("<MouseWheel>", _on_mousewheel))
+        container.bind("<Leave>", lambda _: canvas.unbind_all("<MouseWheel>"))
 
         # Header
         hdr = tk.Frame(inner, bg=T.C_SIDEBAR)

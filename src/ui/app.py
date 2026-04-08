@@ -19,7 +19,7 @@ from src.transcriber import TranscriptionService
 from src.ui.clips_panel import ClipsPanel
 from src.ui.left_panel import LeftPanel
 from src.ui.right_panel import RightPanel
-from src.ui.theme import C_BG, C_BORDER, C_CARD, C_TEXT_2, apply_ttk_styles
+from src.ui.theme import C_BG, C_BORDER, C_CARD, C_SIDEBAR, C_TEXT_2, SIDEBAR_W, apply_ttk_styles
 from src.video_cutter import VideoCutter
 
 
@@ -36,7 +36,8 @@ class App:
         self._root = tk.Tk()
         self._root.title(WINDOW_TITLE)
         self._root.geometry(WINDOW_SIZE)
-        self._root.resizable(False, False)
+        self._root.minsize(640, 480)
+        self._root.resizable(True, True)
         self._root.configure(bg=C_BG)
 
         apply_ttk_styles(self._root)
@@ -73,27 +74,40 @@ class App:
     # ------------------------------------------------------------------
 
     def _build_layout(self) -> None:
-        main_frame = tk.Frame(self._root, bg=C_BG)
-        main_frame.pack(fill="both", expand=True)
+        # PanedWindow gives a draggable sash between the sidebar and the
+        # content area so the user can resize both panels freely.
+        paned = tk.PanedWindow(
+            self._root,
+            orient="horizontal",
+            bg=C_BORDER,       # sash colour matches theme border
+            sashwidth=5,
+            sashpad=0,
+            sashrelief="flat",
+            borderwidth=0,
+            showhandle=False,
+        )
+        paned.pack(fill="both", expand=True)
+
+        left_frame  = tk.Frame(paned, bg=C_SIDEBAR)
+        right_frame = tk.Frame(paned, bg=C_BG)
+
+        # Left pane: fixed initial width; never steals space on window resize.
+        # Right pane: stretches to absorb any extra space on resize / maximise.
+        paned.add(left_frame,  minsize=180, width=SIDEBAR_W, stretch="never")
+        paned.add(right_frame, minsize=300,                  stretch="always")
 
         self._left = LeftPanel(
-            main_frame,
+            left_frame,
             on_transcribe=self._on_transcribe_requested,
             on_generate_clips=self._on_generate_clips_requested,
         )
 
-        # 1px vertical divider
-        tk.Frame(main_frame, bg=C_BORDER, width=1).pack(side="left", fill="y")
-
         # Right side: tabbed notebook
-        right_frame = tk.Frame(main_frame, bg=C_BG)
-        right_frame.pack(side="right", fill="both", expand=True)
-
         self._notebook = ttk.Notebook(right_frame, style="Dark.TNotebook")
         self._notebook.pack(fill="both", expand=True)
 
         transcript_tab = tk.Frame(self._notebook, bg=C_BG)
-        clips_tab = tk.Frame(self._notebook, bg=C_BG)
+        clips_tab      = tk.Frame(self._notebook, bg=C_BG)
 
         self._notebook.add(transcript_tab, text="  Transcript  ")
         self._notebook.add(clips_tab,      text="  Clips  ")
