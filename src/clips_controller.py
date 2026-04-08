@@ -8,6 +8,7 @@ DIP: Depends on service interfaces, not on tkinter or ffmpeg directly.
 """
 
 import threading
+from typing import Any, cast
 
 import whisper as _whisper_module
 
@@ -104,8 +105,9 @@ class ClipsController:
             # ── Stage 1: Transcribe ────────────────────────────────────
             self._on_stage("Transcribing video…")
             model  = _whisper_module.load_model(model_name)
-            result = model.transcribe(path, verbose=False, word_timestamps=True)
-            whisper_segs   = result["segments"]
+            result = cast(dict[str, Any], model.transcribe(path, verbose=False, word_timestamps=True))
+            raw_segments = result.get("segments", [])
+            whisper_segs = raw_segments if isinstance(raw_segments, list) else []
             seg_boundaries = self._build_seg_boundaries(whisper_segs)
             timestamped    = self._build_timestamped_transcript(whisper_segs)
             video_duration = _get_video_duration(path)

@@ -58,7 +58,7 @@ sudo apt update && sudo apt install ffmpeg
 1. Run it:
 
 ```bash
-python program.py
+python main.py
 ```
 
 ---

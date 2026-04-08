@@ -7,6 +7,7 @@ SRP: Only responsible for sending the transcript to Claude and returning
 
 import json
 import re
+from typing import Any
 
 import anthropic
 
@@ -194,7 +195,7 @@ REELS-SPECIFIC RULES (on top of the absolute rules):
 - Total assembled duration per Reel: 15–60 seconds (15–30 s is ideal)
 - End on a high note: strong claim, punchline, or open loop that demands a save
 - Do not include repetitive phrases — if a point is made multiple times, pick the most energetic delivery and cut the rest
-- The segments you choose should flow together naturally when stitched, even if they are non-chronical. The combined narrative should be clear and compelling on its own.
+- The segments you choose should flow together naturally when stitched, even if they are non-chronological. The combined narrative should be clear and compelling on its own.
 
 INFLUENCER STRATEGIES — apply at least one per Reel and name it in "strategy":
 - "pattern_of_3": find where speaker lists or repeats a concept 3 times — great rhythm
@@ -240,6 +241,15 @@ _TEMPLATES: dict[ClipMode, str] = {
 
 class ClipAnalyzer:
     """Calls the Claude API to find viral-worthy clip windows in a transcript."""
+
+    @staticmethod
+    def _extract_text_response(content_blocks: list[Any]) -> str:
+        text_parts: list[str] = []
+        for block in content_blocks:
+            text = getattr(block, "text", None)
+            if isinstance(text, str) and text.strip():
+                text_parts.append(text.strip())
+        return "\n".join(text_parts)
 
     def find_viral_moments(
         self,
@@ -288,7 +298,9 @@ class ClipAnalyzer:
             messages=[{"role": "user", "content": user_message}],
         )
 
-        raw  = response.content[0].text.strip()
+        raw = self._extract_text_response(response.content)
+        if not raw:
+            raise ValueError("Claude returned no text content.")
         data = self._parse_json(raw)
         clips = self._validate_clips(data.get("clips", []), video_duration, clip_mode)
         return sorted(clips, key=lambda c: c.start)
