@@ -13,56 +13,98 @@ import anthropic
 from src.models import ClipMode, ClipResult, Segment, DEFAULT_CLAUDE_MODEL
 
 
-_SYSTEM_PROMPT = """\
-You are an expert social media content strategist who specialises in creating \
-viral short-form video for TikTok, YouTube Shorts, and Instagram Reels.
+# ---------------------------------------------------------------------------
+# System prompt
+# ---------------------------------------------------------------------------
 
-Your output must be ONLY a single valid JSON object — no markdown, no explanation, \
-no code fences. Any deviation will break the pipeline.
+_SYSTEM_PROMPT = """\
+You are an expert social-media video editor and viral content strategist \
+for Instagram, TikTok, and YouTube Shorts. You think like a top influencer \
+editor: every second must earn its place, dead air is cut on sight, filler \
+words are removed, and repeated ideas are distilled to their sharpest form.
+
+ABSOLUTE RULES — apply to every clip in every mode:
+1. SILENCE  — Never let a [SILENCE] gap fall inside your segment windows.
+   A segment must START at the first word after silence and END at the last
+   word before silence. Never straddle a [SILENCE] marker.
+2. REPETITION — If the speaker says the same thing twice, keep only the
+   clearest, most energetic delivery. Drop stumbles and self-corrections.
+3. FILLER OPENINGS — Never open a clip on "um", "uh", "so", "like",
+   "you know", "basically", "anyway", "right", or similar filler.
+   Start on a strong, meaningful word.
+4. ENERGY — Prefer segments from high-confidence, fast-paced speech.
+   Avoid monotone or trailing-off sections.
+
+TRANSCRIPT FORMAT (shown before every transcript):
+- Each line: [HH:MM:SS.f → HH:MM:SS.f]  spoken text
+- [SILENCE: X.Xs] = dead air — your segment boundaries must never overlap these.
+- Use the exact float second values from the timestamps as start/end in your JSON.
+
+Your output must be ONLY a single valid JSON object — no markdown fences, \
+no explanation, no extra keys. Any deviation will break the pipeline.
 """
 
-# ── Mode-specific user prompt templates ──────────────────────────────────────
+
+# ---------------------------------------------------------------------------
+# Universal editing rules appended to every template
+# ---------------------------------------------------------------------------
+
+_EDITING_RULES = """
+EDITING RULES (mandatory for all clips):
+- Skip every [SILENCE] gap — set segment end to the last word before silence,
+  set next segment start to the first word after silence.
+- If the speaker repeats an idea, include only the sharpest version.
+- Never start a clip on a filler word (um, uh, so, like, you know, basically).
+- Prefer the most energetic, confident delivery windows.
+"""
+
+
+# ---------------------------------------------------------------------------
+# Per-mode prompt templates
+# ---------------------------------------------------------------------------
 
 _SINGLE_SHOT_TEMPLATE = """\
-Analyse the transcript below and identify the {max_clips} most viral-worthy \
-CONTINUOUS moments.
+Analyse the transcript and identify the {max_clips} most viral-worthy \
+CONTINUOUS moments. Each clip must be one uninterrupted speech window — \
+no silence gaps inside.
 
 Requirements per clip:
-- One uninterrupted segment, 30–90 seconds (ideal: 45–60 s)
+- Duration: 30–90 seconds (ideal 45–60 s)
 - Self-contained: viewer grasps the point without extra context
-- Strong hook within the first 3 seconds
+- Strong hook in the first 3 seconds
 - Ends at a natural break (punchline, conclusion, or revelation)
 - Emotionally engaging: surprising, funny, inspiring, educational, or controversial
-
-Return this exact JSON shape:
+{editing_rules}
+Return ONLY this exact JSON shape:
 {{
   "clips": [
     {{
-      "start_time": <float — seconds from video start>,
-      "end_time":   <float — seconds from video start>,
+      "start_time": <float — seconds from video start, matching a speech segment start>,
+      "end_time":   <float — seconds from video start, matching a speech segment end>,
       "title":      "<catchy title, max 10 words>",
-      "hook":       "<what happens / is said in the first 3 seconds>",
+      "hook":       "<what is said in the first 3 seconds>",
       "reason":     "<why this will go viral, 1–2 sentences>",
       "category":   "<humor | insight | emotional | shocking | educational>"
     }}
   ]
 }}
 
-TRANSCRIPT (timestamps in seconds):
+TRANSCRIPT:
 {transcript}
 """
 
 _MULTI_CUT_TEMPLATE = """\
-Analyse the transcript below and design {max_clips} highlight-reel short videos. \
-Each video is assembled from 2–5 short clips that share a theme or narrative thread.
+Analyse the transcript and design {max_clips} highlight-reel videos. \
+Each video is assembled from 2–5 short speech windows that share a theme. \
+No window may contain or straddle a [SILENCE] marker.
 
 Requirements per video:
 - Total assembled duration: 45–90 seconds
-- Each individual clip segment: 5–25 seconds
-- Segments should flow naturally when concatenated
+- Each individual segment: 5–20 seconds of speech (trim at speech boundaries)
+- Segments flow naturally when concatenated
 - Together they tell a coherent mini-story or build to a satisfying point
-
-Return this exact JSON shape:
+{editing_rules}
+Return ONLY this exact JSON shape:
 {{
   "clips": [
     {{
@@ -78,27 +120,28 @@ Return this exact JSON shape:
   ]
 }}
 
-TRANSCRIPT (timestamps in seconds):
+TRANSCRIPT:
 {transcript}
 """
 
 _CREATIVE_TEMPLATE = """\
-Analyse the transcript below and design {max_clips} creative short-form videos \
-with intentional narrative arcs. Think like a skilled video editor — cuts do NOT \
-need to be chronological.
+Analyse the transcript and design {max_clips} creative short-form videos \
+with intentional narrative arcs. Think like a skilled editor — cuts do NOT \
+need to be chronological, but every segment must begin and end on speech \
+boundaries (never inside a [SILENCE] gap).
 
-Narrative structure to follow for each video:
+Narrative structure for each video:
   1. Hook (0–5 s): Drop into the most attention-grabbing moment first
-  2. Context (5–30 s): Cuts that help the viewer understand the stakes
+  2. Context (5–30 s): Cuts that build stakes or context
   3. Payoff (30–end): The conclusion, punchline, or revelation
-
+{editing_rules}
 Requirements per video:
 - 3–6 segments, total 30–75 seconds
+- Each segment 5–20 seconds of clean speech
 - Non-linear if it serves the story better
-- Each segment 5–20 seconds
-- Include a "narrative" field describing the editorial arc in 1–2 sentences
+- Include a "narrative" field describing the hook → context → payoff arc
 
-Return this exact JSON shape:
+Return ONLY this exact JSON shape:
 {{
   "clips": [
     {{
@@ -106,7 +149,7 @@ Return this exact JSON shape:
       "hook":      "<what drops in the opening cut>",
       "reason":    "<why this creative edit will resonate, 1–2 sentences>",
       "category":  "<humor | insight | emotional | shocking | educational>",
-      "narrative": "<describe the hook → context → payoff arc>",
+      "narrative": "<hook → context → payoff arc in 1–2 sentences>",
       "segments":  [
         {{"start": <float>, "end": <float>}},
         {{"start": <float>, "end": <float>}},
@@ -116,7 +159,52 @@ Return this exact JSON shape:
   ]
 }}
 
-TRANSCRIPT (timestamps in seconds):
+TRANSCRIPT:
+{transcript}
+"""
+
+_REELS_TEMPLATE = """\
+You are cutting an Instagram Reel. Edit like a top influencer creator: \
+keep only the sharpest phrases, jump-cut across every pause, kill every \
+filler word, and make the viewer feel immediate energy from frame one.
+
+Design {max_clips} Reels assembled from micro-cuts stitched together.
+
+REELS-SPECIFIC RULES (on top of the absolute rules):
+- Max segment duration: 1.5 seconds — one punchy phrase or sentence fragment per cut
+- Min segment duration: 0.3 seconds — no ghost cuts
+- Skip every [SILENCE] marker — set the cut boundary at the nearest speech edge
+- Never open a Reel on filler; the first word must be a hook word
+- Total assembled duration per Reel: 15–60 seconds (15–30 s is ideal)
+- End on a high note: strong claim, punchline, or open loop that demands a save
+
+INFLUENCER STRATEGIES — apply at least one per Reel and name it in "strategy":
+- "pattern_of_3": find where speaker lists or repeats a concept 3 times — great rhythm
+- "contrast_moment": where opinion flips or an unexpected claim appears
+- "open_loop": cut just before the payoff is revealed — drives saves and follows
+- "relatability": moments the audience has personally felt or experienced
+- "authority_signal": surprising expertise, data point, or counterintuitive fact
+- "transformation_tease": before/after or problem/solution structure
+
+Return ONLY this exact JSON shape:
+{{
+  "clips": [
+    {{
+      "title":    "<punchy Reel title, max 8 words, no period>",
+      "hook":     "<exact first words spoken in the Reel>",
+      "strategy": "<one of the six strategy keys above>",
+      "reason":   "<why this will perform on Instagram, 1 sentence>",
+      "cta_hint": "<suggested caption line or on-screen text, e.g. 'Save this! 👇'>",
+      "category": "<humor | insight | emotional | shocking | educational>",
+      "segments": [
+        {{"start": <float>, "end": <float>}},
+        {{"start": <float>, "end": <float>}}
+      ]
+    }}
+  ]
+}}
+
+TRANSCRIPT:
 {transcript}
 """
 
@@ -124,8 +212,13 @@ _TEMPLATES: dict[ClipMode, str] = {
     ClipMode.SINGLE_SHOT: _SINGLE_SHOT_TEMPLATE,
     ClipMode.MULTI_CUT:   _MULTI_CUT_TEMPLATE,
     ClipMode.CREATIVE:    _CREATIVE_TEMPLATE,
+    ClipMode.REELS:       _REELS_TEMPLATE,
 }
 
+
+# ---------------------------------------------------------------------------
+# Analyser
+# ---------------------------------------------------------------------------
 
 class ClipAnalyzer:
     """Calls the Claude API to find viral-worthy clip windows in a transcript."""
@@ -144,14 +237,13 @@ class ClipAnalyzer:
         Send the transcript to Claude and return validated ClipResult objects.
 
         Args:
-            transcript: Timestamped transcript lines.
+            transcript: Timestamped transcript lines (with silence markers).
             video_duration: Total video length in seconds (for validation).
             max_clips: How many clips to request.
             api_key: Anthropic API key.
             clip_mode: Determines the editing strategy and prompt used.
             claude_model: Claude model ID to use.
-            custom_instructions: Optional free-text rules from the user that
-                are appended to the prompt before the transcript.
+            custom_instructions: Optional free-text rules from the user.
 
         Returns:
             List of ClipResult objects sorted by first segment start time.
@@ -159,12 +251,16 @@ class ClipAnalyzer:
         client = anthropic.Anthropic(api_key=api_key)
         template = _TEMPLATES[clip_mode]
 
-        user_message = template.format(max_clips=max_clips, transcript=transcript)
+        user_message = template.format(
+            max_clips=max_clips,
+            transcript=transcript,
+            editing_rules=_EDITING_RULES,
+        )
+
         if custom_instructions.strip():
             user_message += (
                 f"\n\nADDITIONAL INSTRUCTIONS FROM THE USER:\n{custom_instructions.strip()}"
-                "\n\nApply these instructions when selecting and shaping the clips. "
-                "They take priority over the default requirements above."
+                "\n\nApply these on top of all rules above. They take priority where they conflict."
             )
 
         response = client.messages.create(
@@ -174,7 +270,7 @@ class ClipAnalyzer:
             messages=[{"role": "user", "content": user_message}],
         )
 
-        raw = response.content[0].text.strip()
+        raw  = response.content[0].text.strip()
         data = self._parse_json(raw)
         clips = self._validate_clips(data.get("clips", []), video_duration, clip_mode)
         return sorted(clips, key=lambda c: c.start)
@@ -207,6 +303,8 @@ class ClipAnalyzer:
                 reason    = str(item.get("reason",    "")),
                 category  = str(item.get("category",  "insight")),
                 narrative = str(item.get("narrative", "")),
+                strategy  = str(item.get("strategy",  "")),
+                cta_hint  = str(item.get("cta_hint",  "")),
             ))
         return results
 
@@ -214,7 +312,6 @@ class ClipAnalyzer:
         self, item: dict, video_duration: float, clip_mode: ClipMode
     ) -> list[Segment]:
         """Parse segment timestamps from a raw clip dict."""
-        # Single-shot uses top-level start_time / end_time
         if clip_mode is ClipMode.SINGLE_SHOT:
             try:
                 start = float(item["start_time"])
@@ -224,7 +321,7 @@ class ClipAnalyzer:
             except (KeyError, TypeError, ValueError):
                 return []
 
-        # Multi-cut and Creative use a "segments" array
+        # MULTI_CUT, CREATIVE, and REELS all use a "segments" array
         raw_segs = item.get("segments", [])
         if not raw_segs:
             return []

@@ -138,10 +138,30 @@ class ClipsController:
 
     @staticmethod
     def _build_timestamped_transcript(segments: list) -> str:
+        """
+        Build a Claude-readable transcript with explicit start→end timestamps
+        and [SILENCE: X.Xs] markers between segments so the model knows exactly
+        where dead air lives and can avoid including it in clip boundaries.
+        """
+        def fmt(secs: float) -> str:
+            m, s = divmod(int(secs), 60)
+            h, m = divmod(m, 60)
+            frac = int((secs - int(secs)) * 10)
+            return f"{h:02d}:{m:02d}:{s:02d}.{frac}"
+
         lines = []
+        prev_end: float | None = None
+
         for seg in segments:
-            s = seg["start"]
-            m, sec = divmod(int(s), 60)
-            h, m   = divmod(m, 60)
-            lines.append(f"[{h:02d}:{m:02d}:{sec:02d}]  {seg['text'].strip()}")
+            start = seg["start"]
+            end   = seg["end"]
+
+            if prev_end is not None:
+                gap = start - prev_end
+                if gap > 0.3:
+                    lines.append(f"[SILENCE: {gap:.1f}s]")
+
+            lines.append(f"[{fmt(start)} → {fmt(end)}]  {seg['text'].strip()}")
+            prev_end = end
+
         return "\n".join(lines)

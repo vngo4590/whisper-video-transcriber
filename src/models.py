@@ -58,11 +58,13 @@ class ClipMode(Enum):
     SINGLE_SHOT = "single_shot"   # one continuous clip per result
     MULTI_CUT   = "multi_cut"     # 2–5 clips merged into one result
     CREATIVE    = "creative"      # AI-directed narrative arc, non-sequential cuts
+    REELS       = "reels"         # Instagram Reels: micro-cuts, silence removed, influencer strategies
 
 CLIP_MODE_LABELS: dict[ClipMode, str] = {
     ClipMode.SINGLE_SHOT: "Single shot  —  one continuous clip",
     ClipMode.MULTI_CUT:   "Multi-cut  —  merged highlight reel",
     ClipMode.CREATIVE:    "Creative edit  —  AI narrative arc",
+    ClipMode.REELS:       "Instagram Reels  —  micro-cuts, no silence",
 }
 
 DEFAULT_CLIP_MODE = ClipMode.SINGLE_SHOT
@@ -93,6 +95,8 @@ class ClipResult:
     reason:    str
     category:  str
     narrative: str = field(default="")   # creative mode arc description
+    strategy:  str = field(default="")   # reels mode influencer strategy used
+    cta_hint:  str = field(default="")   # reels mode suggested caption / CTA
     output_path: str = field(default="")
 
     @property

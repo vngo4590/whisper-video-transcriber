@@ -175,12 +175,31 @@ class ClipsPanel:
                      bg=T.C_CARD, fg=T.C_TEXT_2,
                      wraplength=400, anchor="w", justify="left").pack(side="left", fill="x")
 
+        # ── Strategy (Reels mode) ──────────────────────────────────────
+        if clip.strategy:
+            strat_row = tk.Frame(card, bg=T.C_CARD)
+            strat_row.pack(fill="x", padx=12, pady=(0, 4))
+            tk.Label(strat_row, text="STRATEGY", font=T.FONT_SECTION,
+                     bg=T.C_CARD, fg=T.C_TEXT_3).pack(side="left", padx=(0, 6))
+            tk.Label(strat_row, text=clip.strategy.replace("_", " ").title(),
+                     font=T.FONT_SMALL, bg=T.C_CARD, fg=T.C_ACCENT).pack(side="left")
+
         # ── Reason ────────────────────────────────────────────────────
         if clip.reason:
             tk.Label(card, text=clip.reason, font=T.FONT_SMALL,
                      bg=T.C_CARD, fg=T.C_TEXT_2,
                      wraplength=440, anchor="w", justify="left",
-                     padx=12).pack(fill="x", pady=(0, 8))
+                     padx=12).pack(fill="x", pady=(0, 4))
+
+        # ── CTA hint (Reels mode) ──────────────────────────────────────
+        if clip.cta_hint:
+            cta_frame = tk.Frame(card, bg=T.C_BORDER, padx=10, pady=6)
+            cta_frame.pack(fill="x", padx=12, pady=(0, 8))
+            tk.Label(cta_frame, text="CAPTION / CTA", font=T.FONT_SECTION,
+                     bg=T.C_BORDER, fg=T.C_TEXT_3).pack(anchor="w")
+            tk.Label(cta_frame, text=clip.cta_hint, font=T.FONT_SMALL,
+                     bg=T.C_BORDER, fg=T.C_TEXT_1,
+                     wraplength=420, anchor="w", justify="left").pack(anchor="w", pady=(2, 0))
 
         # ── Divider + Open folder button ──────────────────────────────
         tk.Frame(card, bg=T.C_BORDER, height=1).pack(fill="x")
