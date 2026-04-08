@@ -16,6 +16,7 @@ from src.models import WINDOW_SIZE, WINDOW_TITLE
 from src.transcriber import TranscriptionService
 from src.ui.left_panel import LeftPanel
 from src.ui.right_panel import RightPanel
+from src.ui.theme import C_BG, C_BORDER, apply_ttk_styles
 
 
 class App:
@@ -32,6 +33,9 @@ class App:
         self._root.title(WINDOW_TITLE)
         self._root.geometry(WINDOW_SIZE)
         self._root.resizable(False, False)
+        self._root.configure(bg=C_BG)
+
+        apply_ttk_styles(self._root)
 
         self._controller = TranscriptionController(
             transcription_service=TranscriptionService(),
@@ -53,10 +57,14 @@ class App:
     # ------------------------------------------------------------------
 
     def _build_layout(self) -> None:
-        main_frame = tk.Frame(self._root)
-        main_frame.pack(fill="both", expand=True, padx=10, pady=10)
+        main_frame = tk.Frame(self._root, bg=C_BG)
+        main_frame.pack(fill="both", expand=True)
 
         self._left = LeftPanel(main_frame, on_transcribe=self._on_transcribe_requested)
+
+        # 1px vertical divider between panels
+        tk.Frame(main_frame, bg=C_BORDER, width=1).pack(side="left", fill="y")
+
         self._right = RightPanel(main_frame)
 
     # ------------------------------------------------------------------

@@ -22,7 +22,7 @@ DEFAULT_MODEL = "base"
 THUMBNAIL_SIZE = (180, 180)
 
 WINDOW_TITLE = "Whisper Video Transcriber"
-WINDOW_SIZE = "900x550"
+WINDOW_SIZE = "980x640"
 
 SUPPORTED_VIDEO_EXTENSIONS = {".mp4"}
 SUPPORTED_AUDIO_EXTENSIONS = {".mp3", ".wav", ".m4a", ".flac", ".ogg"}
