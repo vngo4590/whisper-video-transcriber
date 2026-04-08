@@ -149,10 +149,10 @@ class App:
     # Private — clips callbacks
     # ------------------------------------------------------------------
 
-    def _on_generate_clips_requested(self, path, model_name, max_clips, api_key, claude_model, clip_mode, aspect_ratio):
+    def _on_generate_clips_requested(self, path, model_name, max_clips, api_key, claude_model, clip_mode, aspect_ratio, custom_instructions):
         self._clips.reset()
         self._notebook.select(1)
-        self._clips_controller.run(path, model_name, max_clips, api_key, claude_model, clip_mode, aspect_ratio)
+        self._clips_controller.run(path, model_name, max_clips, api_key, claude_model, clip_mode, aspect_ratio, custom_instructions)
 
     def _on_clips_stage(self, text: str):
         # Callbacks arrive from a background thread — use after() to be thread-safe

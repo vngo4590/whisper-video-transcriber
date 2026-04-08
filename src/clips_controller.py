@@ -56,18 +56,19 @@ class ClipsController:
 
     def run(
         self,
-        path:         str,
-        model_name:   str,
-        max_clips:    int,
-        api_key:      str,
-        claude_model: str,
-        clip_mode:    ClipMode    = ClipMode.SINGLE_SHOT,
-        aspect_ratio: AspectRatio = AspectRatio.ORIGINAL,
+        path:                 str,
+        model_name:           str,
+        max_clips:            int,
+        api_key:              str,
+        claude_model:         str,
+        clip_mode:            ClipMode    = ClipMode.SINGLE_SHOT,
+        aspect_ratio:         AspectRatio = AspectRatio.ORIGINAL,
+        custom_instructions:  str         = "",
     ) -> None:
         """Start the pipeline in a daemon thread; returns immediately."""
         threading.Thread(
             target=self._worker,
-            args=(path, model_name, max_clips, api_key, claude_model, clip_mode, aspect_ratio),
+            args=(path, model_name, max_clips, api_key, claude_model, clip_mode, aspect_ratio, custom_instructions),
             daemon=True,
         ).start()
 
@@ -77,13 +78,14 @@ class ClipsController:
 
     def _worker(
         self,
-        path:         str,
-        model_name:   str,
-        max_clips:    int,
-        api_key:      str,
-        claude_model: str,
-        clip_mode:    ClipMode,
-        aspect_ratio: AspectRatio,
+        path:                str,
+        model_name:          str,
+        max_clips:           int,
+        api_key:             str,
+        claude_model:        str,
+        clip_mode:           ClipMode,
+        aspect_ratio:        AspectRatio,
+        custom_instructions: str,
     ) -> None:
         try:
             # ── Stage 1: Transcribe ────────────────────────────────────
@@ -97,12 +99,13 @@ class ClipsController:
             # ── Stage 2: Analyse with Claude ──────────────────────────
             self._on_stage("Analysing transcript with Claude…")
             clips = self._analyzer.find_viral_moments(
-                transcript   = timestamped,
-                video_duration = video_duration,
-                max_clips    = max_clips,
-                api_key      = api_key,
-                clip_mode    = clip_mode,
-                claude_model = claude_model,
+                transcript           = timestamped,
+                video_duration       = video_duration,
+                max_clips            = max_clips,
+                api_key              = api_key,
+                clip_mode            = clip_mode,
+                claude_model         = claude_model,
+                custom_instructions  = custom_instructions,
             )
 
             if not clips:

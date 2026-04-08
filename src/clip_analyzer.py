@@ -138,6 +138,7 @@ class ClipAnalyzer:
         api_key: str,
         clip_mode: ClipMode = ClipMode.SINGLE_SHOT,
         claude_model: str = DEFAULT_CLAUDE_MODEL.model_id,
+        custom_instructions: str = "",
     ) -> list[ClipResult]:
         """
         Send the transcript to Claude and return validated ClipResult objects.
@@ -149,6 +150,8 @@ class ClipAnalyzer:
             api_key: Anthropic API key.
             clip_mode: Determines the editing strategy and prompt used.
             claude_model: Claude model ID to use.
+            custom_instructions: Optional free-text rules from the user that
+                are appended to the prompt before the transcript.
 
         Returns:
             List of ClipResult objects sorted by first segment start time.
@@ -156,19 +159,19 @@ class ClipAnalyzer:
         client = anthropic.Anthropic(api_key=api_key)
         template = _TEMPLATES[clip_mode]
 
+        user_message = template.format(max_clips=max_clips, transcript=transcript)
+        if custom_instructions.strip():
+            user_message += (
+                f"\n\nADDITIONAL INSTRUCTIONS FROM THE USER:\n{custom_instructions.strip()}"
+                "\n\nApply these instructions when selecting and shaping the clips. "
+                "They take priority over the default requirements above."
+            )
+
         response = client.messages.create(
             model=claude_model,
             max_tokens=4096,
             system=_SYSTEM_PROMPT,
-            messages=[
-                {
-                    "role": "user",
-                    "content": template.format(
-                        max_clips=max_clips,
-                        transcript=transcript,
-                    ),
-                }
-            ],
+            messages=[{"role": "user", "content": user_message}],
         )
 
         raw = response.content[0].text.strip()

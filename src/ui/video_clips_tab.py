@@ -2,8 +2,8 @@
 ui/video_clips_tab.py — Video Clips mode tab panel.
 
 SRP: Owns all clip-generation settings (API key, Claude model, clip mode,
-     aspect ratio, clip count) and the Generate Clips action. Has no
-     knowledge of transcription settings.
+     aspect ratio, clip count, custom instructions) and the Generate Clips
+     action. Has no knowledge of transcription settings.
 GRASP Information Expert: sole authority on clip parameters. Reads shared
      *selected_path* / *model_var* supplied by LeftPanel.
 """
@@ -17,7 +17,12 @@ from src.models import (
     AspectRatio, ClipMode,
 )
 import src.ui.theme as T
-from src.ui.sidebar_widgets import card, hover
+from src.ui.sidebar_widgets import card, hover, section_label
+
+_INSTRUCTIONS_PLACEHOLDER = (
+    "e.g. Focus on funny moments only. Highlight any product mentions. "
+    "Keep clips under 45 s. Avoid political topics."
+)
 
 
 class VideoClipsTab:
@@ -28,7 +33,9 @@ class VideoClipsTab:
         parent: The tab frame inside the left-panel Notebook.
         selected_path: Shared StringVar holding the chosen file path.
         model_var: Shared StringVar holding the chosen Whisper model name.
-        on_generate_clips: Callback invoked on submit.
+        on_generate_clips: Callback — ``on_generate_clips(path, model_name,
+                           max_clips, api_key, claude_model, clip_mode,
+                           aspect_ratio, custom_instructions)``.
     """
 
     def __init__(
@@ -58,6 +65,7 @@ class VideoClipsTab:
         self._claude_model_menu.config(state=combo)
         self._clip_mode_menu.config(state=combo)
         self._aspect_ratio_menu.config(state=combo)
+        self._instructions_text.config(state=btn)
         self._clips_button.config(
             state=btn,
             bg=T.C_ACCENT_D if busy else T.C_ACCENT,
@@ -69,6 +77,7 @@ class VideoClipsTab:
     # ------------------------------------------------------------------
 
     def _build(self, parent: tk.Widget) -> None:
+        # ── Settings card ─────────────────────────────────────────────
         clips_card = card(parent)
         clips_card.pack_configure(pady=(14, 0))
 
@@ -113,7 +122,7 @@ class VideoClipsTab:
 
         # Number of clips
         clips_row = tk.Frame(clips_card, bg=T.C_CARD)
-        clips_row.pack(fill="x", pady=(0, 10))
+        clips_row.pack(fill="x")
         tk.Label(clips_row, text="Number of clips", font=T.FONT_LABEL,
                  bg=T.C_CARD, fg=T.C_TEXT_2).pack(side="left")
         self._max_clips_spinbox = tk.Spinbox(
@@ -125,9 +134,54 @@ class VideoClipsTab:
         )
         self._max_clips_spinbox.pack(side="right")
 
-        # Generate Clips button
+        # ── Custom instructions card ───────────────────────────────────
+        section_label(parent, "CUSTOM INSTRUCTIONS  (optional)")
+        instr_card = card(parent)
+
+        tk.Label(
+            instr_card,
+            text="Tell Claude what to focus on, avoid, or how to edit:",
+            font=T.FONT_SMALL, bg=T.C_CARD, fg=T.C_TEXT_2,
+            wraplength=T.SIDEBAR_W - T.PAD_H * 2 - T.PAD_CARD * 2,
+            justify="left", anchor="w",
+        ).pack(fill="x", pady=(0, 6))
+
+        text_frame = tk.Frame(instr_card, bg=T.C_BORDER, padx=1, pady=1)
+        text_frame.pack(fill="x")
+
+        self._instructions_text = tk.Text(
+            text_frame,
+            height=5,
+            wrap=tk.WORD,
+            font=T.FONT_LABEL,
+            bg=T.C_BG,
+            fg=T.C_TEXT_3,          # muted while showing placeholder
+            insertbackground=T.C_TEXT_1,
+            selectbackground=T.C_ACCENT,
+            selectforeground="#ffffff",
+            relief="flat",
+            bd=0,
+            padx=8,
+            pady=6,
+        )
+        instr_scrollbar = ttk.Scrollbar(
+            text_frame, orient="vertical",
+            command=self._instructions_text.yview,
+            style="Sidebar.Vertical.TScrollbar",
+        )
+        self._instructions_text.configure(yscrollcommand=instr_scrollbar.set)
+        self._instructions_text.pack(side="left", fill="x", expand=True)
+        instr_scrollbar.pack(side="right", fill="y")
+
+        # Placeholder behaviour
+        self._instructions_text.insert("1.0", _INSTRUCTIONS_PLACEHOLDER)
+        self._instructions_placeholder_active = True
+        self._instructions_text.bind("<FocusIn>",  self._on_instructions_focus_in)
+        self._instructions_text.bind("<FocusOut>", self._on_instructions_focus_out)
+
+        # ── Generate Clips button ──────────────────────────────────────
         btn_frame = tk.Frame(parent, bg=T.C_SIDEBAR)
-        btn_frame.pack(fill="x", padx=T.PAD_H, pady=(10, 10))
+        btn_frame.pack(fill="x", padx=T.PAD_H, pady=(12, 10))
         self._clips_button = tk.Button(
             btn_frame, text="Generate Clips", command=self._handle_submit,
             font=T.FONT_BUTTON, bg=T.C_ACCENT, fg="#ffffff",
@@ -136,6 +190,31 @@ class VideoClipsTab:
         )
         self._clips_button.pack(fill="x")
         hover(self._clips_button, T.C_ACCENT, T.C_ACCENT_H)
+
+    # ------------------------------------------------------------------
+    # Private — placeholder helpers
+    # ------------------------------------------------------------------
+
+    def _on_instructions_focus_in(self, _event) -> None:
+        if self._instructions_placeholder_active:
+            self._instructions_text.delete("1.0", tk.END)
+            self._instructions_text.config(fg=T.C_TEXT_1)
+            self._instructions_placeholder_active = False
+
+    def _on_instructions_focus_out(self, _event) -> None:
+        if not self._instructions_text.get("1.0", tk.END).strip():
+            self._instructions_text.insert("1.0", _INSTRUCTIONS_PLACEHOLDER)
+            self._instructions_text.config(fg=T.C_TEXT_3)
+            self._instructions_placeholder_active = True
+
+    def _get_custom_instructions(self) -> str:
+        if self._instructions_placeholder_active:
+            return ""
+        return self._instructions_text.get("1.0", tk.END).strip()
+
+    # ------------------------------------------------------------------
+    # Private — resolve helpers
+    # ------------------------------------------------------------------
 
     def _resolve_claude_model_id(self) -> str:
         selected = self._claude_model_var.get()
@@ -175,4 +254,5 @@ class VideoClipsTab:
             self._resolve_claude_model_id(),
             self._resolve_clip_mode(),
             self._resolve_aspect_ratio(),
+            self._get_custom_instructions(),
         )
