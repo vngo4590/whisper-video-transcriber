@@ -161,6 +161,9 @@ class ClipsPanel:
         dur_text = f"{mins}m {secs}s" if mins else f"{secs}s"
         tk.Label(ts_frame, text=f"  ·  {dur_text}",
                  font=T.FONT_SMALL, bg=T.C_CARD, fg=T.C_TEXT_3).pack(side="left")
+        if len(clip.segments) > 1:
+            tk.Label(ts_frame, text=f"  ·  {len(clip.segments)} cuts",
+                     font=T.FONT_SMALL, bg=T.C_CARD, fg=T.C_TEXT_3).pack(side="left")
 
         # ── Hook ──────────────────────────────────────────────────────
         if clip.hook:

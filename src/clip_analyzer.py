@@ -10,44 +10,121 @@ import re
 
 import anthropic
 
-from src.models import ClipResult, DEFAULT_CLAUDE_MODEL
+from src.models import ClipMode, ClipResult, Segment, DEFAULT_CLAUDE_MODEL
 
 
 _SYSTEM_PROMPT = """\
-You are an expert social media content strategist who specialises in identifying \
-viral-worthy moments for TikTok and YouTube Shorts.
+You are an expert social media content strategist who specialises in creating \
+viral short-form video for TikTok, YouTube Shorts, and Instagram Reels.
 
 Your output must be ONLY a single valid JSON object — no markdown, no explanation, \
 no code fences. Any deviation will break the pipeline.
 """
 
-_USER_TEMPLATE = """\
-Analyse the transcript below and identify the {max_clips} most viral-worthy moments.
+# ── Mode-specific user prompt templates ──────────────────────────────────────
 
-Requirements for each clip:
-- Duration: 30–90 seconds (ideal: 45–60 s)
-- Self-contained: the viewer grasps the point without extra context
+_SINGLE_SHOT_TEMPLATE = """\
+Analyse the transcript below and identify the {max_clips} most viral-worthy \
+CONTINUOUS moments.
+
+Requirements per clip:
+- One uninterrupted segment, 30–90 seconds (ideal: 45–60 s)
+- Self-contained: viewer grasps the point without extra context
 - Strong hook within the first 3 seconds
 - Ends at a natural break (punchline, conclusion, or revelation)
 - Emotionally engaging: surprising, funny, inspiring, educational, or controversial
 
-Return a JSON object with this exact shape:
+Return this exact JSON shape:
 {{
   "clips": [
     {{
-      "start_time": <float, seconds from start of video>,
-      "end_time":   <float, seconds from start of video>,
-      "title":      "<catchy TikTok title, max 10 words>",
+      "start_time": <float — seconds from video start>,
+      "end_time":   <float — seconds from video start>,
+      "title":      "<catchy title, max 10 words>",
       "hook":       "<what happens / is said in the first 3 seconds>",
-      "reason":     "<why this moment will go viral, 1-2 sentences>",
-      "category":   "<one of: humor | insight | emotional | shocking | educational>"
+      "reason":     "<why this will go viral, 1–2 sentences>",
+      "category":   "<humor | insight | emotional | shocking | educational>"
     }}
   ]
 }}
 
-TRANSCRIPT (with timestamps in seconds):
+TRANSCRIPT (timestamps in seconds):
 {transcript}
 """
+
+_MULTI_CUT_TEMPLATE = """\
+Analyse the transcript below and design {max_clips} highlight-reel short videos. \
+Each video is assembled from 2–5 short clips that share a theme or narrative thread.
+
+Requirements per video:
+- Total assembled duration: 45–90 seconds
+- Each individual clip segment: 5–25 seconds
+- Segments should flow naturally when concatenated
+- Together they tell a coherent mini-story or build to a satisfying point
+
+Return this exact JSON shape:
+{{
+  "clips": [
+    {{
+      "title":    "<catchy title, max 10 words>",
+      "hook":     "<what happens in the very first cut>",
+      "reason":   "<why this highlight reel will go viral, 1–2 sentences>",
+      "category": "<humor | insight | emotional | shocking | educational>",
+      "segments": [
+        {{"start": <float>, "end": <float>}},
+        {{"start": <float>, "end": <float>}}
+      ]
+    }}
+  ]
+}}
+
+TRANSCRIPT (timestamps in seconds):
+{transcript}
+"""
+
+_CREATIVE_TEMPLATE = """\
+Analyse the transcript below and design {max_clips} creative short-form videos \
+with intentional narrative arcs. Think like a skilled video editor — cuts do NOT \
+need to be chronological.
+
+Narrative structure to follow for each video:
+  1. Hook (0–5 s): Drop into the most attention-grabbing moment first
+  2. Context (5–30 s): Cuts that help the viewer understand the stakes
+  3. Payoff (30–end): The conclusion, punchline, or revelation
+
+Requirements per video:
+- 3–6 segments, total 30–75 seconds
+- Non-linear if it serves the story better
+- Each segment 5–20 seconds
+- Include a "narrative" field describing the editorial arc in 1–2 sentences
+
+Return this exact JSON shape:
+{{
+  "clips": [
+    {{
+      "title":     "<catchy title, max 10 words>",
+      "hook":      "<what drops in the opening cut>",
+      "reason":    "<why this creative edit will resonate, 1–2 sentences>",
+      "category":  "<humor | insight | emotional | shocking | educational>",
+      "narrative": "<describe the hook → context → payoff arc>",
+      "segments":  [
+        {{"start": <float>, "end": <float>}},
+        {{"start": <float>, "end": <float>}},
+        {{"start": <float>, "end": <float>}}
+      ]
+    }}
+  ]
+}}
+
+TRANSCRIPT (timestamps in seconds):
+{transcript}
+"""
+
+_TEMPLATES: dict[ClipMode, str] = {
+    ClipMode.SINGLE_SHOT: _SINGLE_SHOT_TEMPLATE,
+    ClipMode.MULTI_CUT:   _MULTI_CUT_TEMPLATE,
+    ClipMode.CREATIVE:    _CREATIVE_TEMPLATE,
+}
 
 
 class ClipAnalyzer:
@@ -59,34 +136,34 @@ class ClipAnalyzer:
         video_duration: float,
         max_clips: int,
         api_key: str,
+        clip_mode: ClipMode = ClipMode.SINGLE_SHOT,
         claude_model: str = DEFAULT_CLAUDE_MODEL.model_id,
     ) -> list[ClipResult]:
         """
         Send the transcript to Claude and return validated ClipResult objects.
 
         Args:
-            transcript: Full plain-text transcript with timestamp context.
-            video_duration: Total video length in seconds (used for validation).
+            transcript: Timestamped transcript lines.
+            video_duration: Total video length in seconds (for validation).
             max_clips: How many clips to request.
             api_key: Anthropic API key.
+            clip_mode: Determines the editing strategy and prompt used.
+            claude_model: Claude model ID to use.
 
         Returns:
-            List of ClipResult objects, sorted by start time.
-
-        Raises:
-            ValueError: If Claude returns unparseable JSON.
-            anthropic.APIError: On API failure.
+            List of ClipResult objects sorted by first segment start time.
         """
         client = anthropic.Anthropic(api_key=api_key)
+        template = _TEMPLATES[clip_mode]
 
         response = client.messages.create(
             model=claude_model,
-            max_tokens=2048,
+            max_tokens=4096,
             system=_SYSTEM_PROMPT,
             messages=[
                 {
                     "role": "user",
-                    "content": _USER_TEMPLATE.format(
+                    "content": template.format(
                         max_clips=max_clips,
                         transcript=transcript,
                     ),
@@ -96,7 +173,7 @@ class ClipAnalyzer:
 
         raw = response.content[0].text.strip()
         data = self._parse_json(raw)
-        clips = self._validate_clips(data.get("clips", []), video_duration)
+        clips = self._validate_clips(data.get("clips", []), video_duration, clip_mode)
         return sorted(clips, key=lambda c: c.start)
 
     # ------------------------------------------------------------------
@@ -104,41 +181,65 @@ class ClipAnalyzer:
     # ------------------------------------------------------------------
 
     def _parse_json(self, raw: str) -> dict:
-        """Extract and parse the JSON object from Claude's response."""
-        # Strip any accidental markdown fences
         cleaned = re.sub(r"```(?:json)?|```", "", raw).strip()
         try:
             return json.loads(cleaned)
         except json.JSONDecodeError as exc:
             raise ValueError(
-                f"Claude returned invalid JSON.\n"
-                f"Response: {raw[:500]}\n"
-                f"Error: {exc}"
+                f"Claude returned invalid JSON.\nResponse: {raw[:500]}\nError: {exc}"
             ) from exc
 
-    def _validate_clips(self, raw_clips: list, video_duration: float) -> list[ClipResult]:
-        """Convert raw dicts to ClipResult, skipping malformed or out-of-range entries."""
+    def _validate_clips(
+        self, raw_clips: list, video_duration: float, clip_mode: ClipMode
+    ) -> list[ClipResult]:
         results = []
         for item in raw_clips:
+            segments = self._extract_segments(item, video_duration, clip_mode)
+            if not segments:
+                continue
+            results.append(ClipResult(
+                segments  = segments,
+                title     = str(item.get("title",     "Untitled clip")),
+                hook      = str(item.get("hook",      "")),
+                reason    = str(item.get("reason",    "")),
+                category  = str(item.get("category",  "insight")),
+                narrative = str(item.get("narrative", "")),
+            ))
+        return results
+
+    def _extract_segments(
+        self, item: dict, video_duration: float, clip_mode: ClipMode
+    ) -> list[Segment]:
+        """Parse segment timestamps from a raw clip dict."""
+        # Single-shot uses top-level start_time / end_time
+        if clip_mode is ClipMode.SINGLE_SHOT:
             try:
                 start = float(item["start_time"])
                 end   = float(item["end_time"])
+                start, end = self._clamp(start, end, video_duration)
+                return [Segment(start, end)] if end > start else []
+            except (KeyError, TypeError, ValueError):
+                return []
+
+        # Multi-cut and Creative use a "segments" array
+        raw_segs = item.get("segments", [])
+        if not raw_segs:
+            return []
+
+        segments = []
+        for s in raw_segs:
+            try:
+                start = float(s["start"])
+                end   = float(s["end"])
+                start, end = self._clamp(start, end, video_duration)
+                if end > start:
+                    segments.append(Segment(start, end))
             except (KeyError, TypeError, ValueError):
                 continue
+        return segments
 
-            # Clamp to video bounds
-            start = max(0.0, min(start, video_duration))
-            end   = max(0.0, min(end,   video_duration))
-
-            if end <= start:
-                continue
-
-            results.append(ClipResult(
-                start    = start,
-                end      = end,
-                title    = str(item.get("title",    "Untitled clip")),
-                hook     = str(item.get("hook",     "")),
-                reason   = str(item.get("reason",   "")),
-                category = str(item.get("category", "insight")),
-            ))
-        return results
+    @staticmethod
+    def _clamp(start: float, end: float, duration: float) -> tuple[float, float]:
+        start = max(0.0, min(start, duration))
+        end   = max(0.0, min(end,   duration))
+        return start, end

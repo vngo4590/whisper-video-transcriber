@@ -13,7 +13,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
 from src import media_utils
-from src.models import CLAUDE_MODELS, DEFAULT_CLAUDE_MODEL, DEFAULT_EXPORT_FORMAT, DEFAULT_MAX_CLIPS, DEFAULT_MAX_WORDS_PER_LINE, DEFAULT_MODEL, MEDIA_FILE_TYPES, WHISPER_MODELS, ExportFormat
+from src.models import ASPECT_RATIO_LABELS, CLAUDE_MODELS, CLIP_MODE_LABELS, DEFAULT_ASPECT_RATIO, DEFAULT_CLAUDE_MODEL, DEFAULT_CLIP_MODE, DEFAULT_EXPORT_FORMAT, DEFAULT_MAX_CLIPS, DEFAULT_MAX_WORDS_PER_LINE, DEFAULT_MODEL, MEDIA_FILE_TYPES, WHISPER_MODELS, AspectRatio, ClipMode, ExportFormat
 import src.ui.theme as T
 
 
@@ -43,9 +43,11 @@ class LeftPanel:
         self._max_words_var = tk.IntVar(value=DEFAULT_MAX_WORDS_PER_LINE)
         self._translate_var = tk.BooleanVar(value=False)
         self._model_choice = tk.StringVar(value=DEFAULT_MODEL)
-        self._max_clips_var = tk.IntVar(value=DEFAULT_MAX_CLIPS)
-        self._api_key_var = tk.StringVar()
+        self._max_clips_var    = tk.IntVar(value=DEFAULT_MAX_CLIPS)
+        self._api_key_var      = tk.StringVar()
         self._claude_model_var = tk.StringVar(value=DEFAULT_CLAUDE_MODEL.label)
+        self._clip_mode_var    = tk.StringVar(value=CLIP_MODE_LABELS[DEFAULT_CLIP_MODE])
+        self._aspect_ratio_var = tk.StringVar(value=ASPECT_RATIO_LABELS[DEFAULT_ASPECT_RATIO])
 
         self._build(parent)
 
@@ -69,6 +71,8 @@ class LeftPanel:
         self._max_clips_spinbox.config(state=btn)
         self._api_key_entry.config(state=btn)
         self._claude_model_menu.config(state=combo)
+        self._clip_mode_menu.config(state=combo)
+        self._aspect_ratio_menu.config(state=combo)
 
         if busy:
             self._confirm_button.config(bg=T.C_ACCENT_D, cursor="")
@@ -243,6 +247,30 @@ class LeftPanel:
         )
         self._claude_model_menu.pack(fill="x", pady=(4, 10))
 
+        # Clip mode
+        tk.Label(clips_card, text="Clip mode", font=T.FONT_LABEL,
+                 bg=T.C_CARD, fg=T.C_TEXT_2).pack(anchor="w")
+        self._clip_mode_menu = ttk.Combobox(
+            clips_card,
+            textvariable=self._clip_mode_var,
+            state="readonly",
+            values=list(CLIP_MODE_LABELS.values()),
+            style="Dark.TCombobox",
+        )
+        self._clip_mode_menu.pack(fill="x", pady=(4, 10))
+
+        # Aspect ratio
+        tk.Label(clips_card, text="Aspect ratio", font=T.FONT_LABEL,
+                 bg=T.C_CARD, fg=T.C_TEXT_2).pack(anchor="w")
+        self._aspect_ratio_menu = ttk.Combobox(
+            clips_card,
+            textvariable=self._aspect_ratio_var,
+            state="readonly",
+            values=list(ASPECT_RATIO_LABELS.values()),
+            style="Dark.TCombobox",
+        )
+        self._aspect_ratio_menu.pack(fill="x", pady=(4, 10))
+
         # Clip count spinbox
         clips_row = tk.Frame(clips_card, bg=T.C_CARD)
         clips_row.pack(fill="x", pady=(0, 10))
@@ -360,12 +388,25 @@ class LeftPanel:
             print(f"Thumbnail error: {exc}")
 
     def _resolve_claude_model_id(self) -> str:
-        """Map the selected combobox label back to the Claude model ID."""
         selected = self._claude_model_var.get()
         for m in CLAUDE_MODELS:
             if selected.startswith(m.label):
                 return m.model_id
         return DEFAULT_CLAUDE_MODEL.model_id
+
+    def _resolve_clip_mode(self) -> ClipMode:
+        selected = self._clip_mode_var.get()
+        for mode, label in CLIP_MODE_LABELS.items():
+            if selected == label:
+                return mode
+        return DEFAULT_CLIP_MODE
+
+    def _resolve_aspect_ratio(self) -> AspectRatio:
+        selected = self._aspect_ratio_var.get()
+        for ratio, label in ASPECT_RATIO_LABELS.items():
+            if selected == label:
+                return ratio
+        return DEFAULT_ASPECT_RATIO
 
     def _handle_generate_clips(self) -> None:
         path = self._selected_path.get()
@@ -382,6 +423,8 @@ class LeftPanel:
             self._max_clips_var.get(),
             api_key,
             self._resolve_claude_model_id(),
+            self._resolve_clip_mode(),
+            self._resolve_aspect_ratio(),
         )
 
     def _handle_transcribe(self) -> None:

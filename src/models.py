@@ -10,24 +10,102 @@ from enum import Enum
 from typing import NamedTuple
 
 
+# ---------------------------------------------------------------------------
+# Export format
+# ---------------------------------------------------------------------------
+
 class ExportFormat(Enum):
-    SRT = "srt"
+    SRT        = "srt"
     PLAIN_TEXT = "plain_text"
 
 
+# ---------------------------------------------------------------------------
+# Clip aspect ratio
+# ---------------------------------------------------------------------------
+
+class AspectRatio(Enum):
+    ORIGINAL = "original"   # keep source resolution
+    R9_16    = "9:16"       # vertical — TikTok / Reels / Shorts
+    R16_9    = "16:9"       # horizontal — YouTube
+    R1_1     = "1:1"        # square — Instagram
+    R4_3     = "4:3"        # classic
+
+# Target (width, height) per ratio; None means no spatial conversion
+ASPECT_RATIO_SIZES: dict[AspectRatio, tuple[int, int] | None] = {
+    AspectRatio.ORIGINAL: None,
+    AspectRatio.R9_16:    (1080, 1920),
+    AspectRatio.R16_9:    (1920, 1080),
+    AspectRatio.R1_1:     (1080, 1080),
+    AspectRatio.R4_3:     (1440, 1080),
+}
+
+ASPECT_RATIO_LABELS: dict[AspectRatio, str] = {
+    AspectRatio.ORIGINAL: "Original  (no conversion)",
+    AspectRatio.R9_16:    "9:16  vertical  (TikTok / Reels)",
+    AspectRatio.R16_9:    "16:9  horizontal  (YouTube)",
+    AspectRatio.R1_1:     "1:1  square  (Instagram)",
+    AspectRatio.R4_3:     "4:3  classic",
+}
+
+DEFAULT_ASPECT_RATIO = AspectRatio.R9_16
+
+
+# ---------------------------------------------------------------------------
+# Clip mode
+# ---------------------------------------------------------------------------
+
+class ClipMode(Enum):
+    SINGLE_SHOT = "single_shot"   # one continuous clip per result
+    MULTI_CUT   = "multi_cut"     # 2–5 clips merged into one result
+    CREATIVE    = "creative"      # AI-directed narrative arc, non-sequential cuts
+
+CLIP_MODE_LABELS: dict[ClipMode, str] = {
+    ClipMode.SINGLE_SHOT: "Single shot  —  one continuous clip",
+    ClipMode.MULTI_CUT:   "Multi-cut  —  merged highlight reel",
+    ClipMode.CREATIVE:    "Creative edit  —  AI narrative arc",
+}
+
+DEFAULT_CLIP_MODE = ClipMode.SINGLE_SHOT
+
+
+# ---------------------------------------------------------------------------
+# Clip data models
+# ---------------------------------------------------------------------------
+
 @dataclass
-class ClipResult:
-    start: float
-    end: float
-    title: str
-    hook: str
-    reason: str
-    category: str
-    output_path: str = field(default="")
+class Segment:
+    """A single contiguous clip window within the source video."""
+    start: float   # seconds
+    end:   float   # seconds
 
     @property
     def duration(self) -> float:
         return self.end - self.start
+
+
+@dataclass
+class ClipResult:
+    """One output clip, which may be assembled from one or more Segments."""
+
+    segments:  list[Segment]
+    title:     str
+    hook:      str
+    reason:    str
+    category:  str
+    narrative: str = field(default="")   # creative mode arc description
+    output_path: str = field(default="")
+
+    @property
+    def start(self) -> float:
+        return self.segments[0].start if self.segments else 0.0
+
+    @property
+    def end(self) -> float:
+        return self.segments[-1].end if self.segments else 0.0
+
+    @property
+    def duration(self) -> float:
+        return sum(s.duration for s in self.segments)
 
     @property
     def timestamp_label(self) -> str:
@@ -35,42 +113,51 @@ class ClipResult:
             m, sec = divmod(int(s), 60)
             h, m = divmod(m, 60)
             return f"{h:02d}:{m:02d}:{sec:02d}"
-        return f"{fmt(self.start)} → {fmt(self.end)}"
+        if len(self.segments) == 1:
+            return f"{fmt(self.start)} → {fmt(self.end)}"
+        return f"{len(self.segments)} cuts  ·  {fmt(self.start)} – {fmt(self.end)}"
 
-
-DEFAULT_EXPORT_FORMAT = ExportFormat.SRT
-DEFAULT_MAX_WORDS_PER_LINE = 5
-
-WHISPER_MODELS = ["tiny", "base", "small", "medium", "large"]
-DEFAULT_MODEL = "base"
-
-THUMBNAIL_SIZE = (180, 180)
 
 # ---------------------------------------------------------------------------
 # Claude model catalogue — ordered cheapest → most expensive
 # ---------------------------------------------------------------------------
 
 class ClaudeModel(NamedTuple):
-    model_id: str     # API identifier
-    label: str        # short name shown in the UI
-    cost_tier: str    # dollar-sign cost indicator shown in the dropdown
-
+    model_id:  str
+    label:     str
+    cost_tier: str
 
 CLAUDE_MODELS: list[ClaudeModel] = [
     ClaudeModel("claude-haiku-4-5-20251001", "Haiku 4.5",  "$    fastest & cheapest"),
     ClaudeModel("claude-sonnet-4-6",          "Sonnet 4.6", "$$   balanced  ★ recommended"),
     ClaudeModel("claude-opus-4-6",            "Opus 4.6",   "$$$  most capable"),
 ]
-DEFAULT_CLAUDE_MODEL = CLAUDE_MODELS[1]   # Sonnet
+DEFAULT_CLAUDE_MODEL = CLAUDE_MODELS[1]
+
+
+# ---------------------------------------------------------------------------
+# Whisper
+# ---------------------------------------------------------------------------
+
+DEFAULT_EXPORT_FORMAT    = ExportFormat.SRT
+DEFAULT_MAX_WORDS_PER_LINE = 5
+
+WHISPER_MODELS = ["tiny", "base", "small", "medium", "large"]
+DEFAULT_MODEL  = "base"
+
+THUMBNAIL_SIZE = (180, 180)
 
 DEFAULT_MAX_CLIPS = 5
-CLIP_ASPECT_W = 1080
-CLIP_ASPECT_H = 1920
-CLIP_BITRATE = "8M"
-CLIP_FPS = 30
+CLIP_BITRATE      = "8M"
+CLIP_FPS          = 30
+
+
+# ---------------------------------------------------------------------------
+# Window / file dialogs
+# ---------------------------------------------------------------------------
 
 WINDOW_TITLE = "Whisper Video Transcriber"
-WINDOW_SIZE = "980x640"
+WINDOW_SIZE  = "980x640"
 
 SUPPORTED_VIDEO_EXTENSIONS = {".mp4"}
 SUPPORTED_AUDIO_EXTENSIONS = {".mp3", ".wav", ".m4a", ".flac", ".ogg"}
@@ -79,5 +166,5 @@ MEDIA_FILE_TYPES = [
     ("Media files", "*.mp4 *.mp3 *.wav *.m4a *.flac *.ogg"),
     ("Video files", "*.mp4"),
     ("Audio files", "*.mp3 *.wav *.m4a *.flac *.ogg"),
-    ("All files", "*.*"),
+    ("All files",   "*.*"),
 ]
