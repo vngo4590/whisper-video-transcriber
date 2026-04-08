@@ -29,7 +29,7 @@ def _get_video_duration(path: str) -> float:
 _MIN_SEGMENT_DURATION: dict[ClipMode, float] = {
     ClipMode.SINGLE_SHOT: 1.0,   # one long clip — unlikely to trigger, but guard anyway
     ClipMode.MULTI_CUT:   1.0,   # each stitched piece must be a full sentence
-    ClipMode.CREATIVE:    1.0,
+    ClipMode.CREATIVE:    0.5,
     ClipMode.REELS:       0.5,   # micro-cuts — complete phrase minimum
 }
 
