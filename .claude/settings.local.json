@@ -3,8 +3,10 @@
     "allow": [
       "Bash(python:*)",
       "WebSearch",
-      "Bash(pip install:*)",
-      "Bash(gh auth:*)"
+      "Bash(pip:*)",
+      "Bash(gh:*)",
+      "Bash(npm:*)",
+      "Bash(git:*)"
     ]
   }
 }
