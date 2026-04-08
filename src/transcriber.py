@@ -119,7 +119,7 @@ class TranscriptionService:
 
         if export_format is ExportFormat.SRT:
             return self._build_srt(result["segments"], max_words_per_subtitle)
-        return result["text"]
+        return str(result["text"])
 
     # ------------------------------------------------------------------
     # Private helpers

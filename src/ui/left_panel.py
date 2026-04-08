@@ -130,6 +130,7 @@ class LeftPanel:
 
         self._preview_label = tk.Label(file_card, bg=T.C_CARD)
         self._preview_label.pack(pady=(8, 0))
+        self._thumbnail_ref: object = None  # keeps PhotoImage alive (prevents GC)
 
         # ================================================================
         # EXPORT FORMAT section
@@ -137,16 +138,10 @@ class LeftPanel:
         self._section_label(inner, "EXPORT FORMAT")
         fmt_card = self._card(inner)
 
-        radio_kw = dict(
-            variable=self._export_format_var,
-            font=T.FONT_LABEL, bg=T.C_CARD, fg=T.C_TEXT_1,
-            activebackground=T.C_CARD, activeforeground=T.C_TEXT_1,
-            selectcolor=T.C_ACCENT, relief="flat", bd=0, cursor="hand2",
-        )
-        self._radio_srt = tk.Radiobutton(fmt_card, text="SRT  (with timestamps)", value=ExportFormat.SRT.value, **radio_kw)
+        self._radio_srt = self._radiobutton(fmt_card, text="SRT  (with timestamps)", value=ExportFormat.SRT.value)
         self._radio_srt.pack(anchor="w")
 
-        self._radio_plain = tk.Radiobutton(fmt_card, text="Plain text", value=ExportFormat.PLAIN_TEXT.value, **radio_kw)
+        self._radio_plain = self._radiobutton(fmt_card, text="Plain text", value=ExportFormat.PLAIN_TEXT.value)
         self._radio_plain.pack(anchor="w", pady=(4, 10))
 
         words_row = tk.Frame(fmt_card, bg=T.C_CARD)
@@ -223,6 +218,24 @@ class LeftPanel:
     # Private — layout helpers
     # ------------------------------------------------------------------
 
+    def _radiobutton(self, parent: tk.Widget, text: str, value: str) -> tk.Radiobutton:
+        """Create a consistently styled radio button tied to the export-format variable."""
+        return tk.Radiobutton(
+            parent,
+            text=text,
+            value=value,
+            variable=self._export_format_var,
+            font=T.FONT_LABEL,
+            bg=T.C_CARD,
+            fg=T.C_TEXT_1,
+            activebackground=T.C_CARD,
+            activeforeground=T.C_TEXT_1,
+            selectcolor=T.C_ACCENT,
+            relief="flat",
+            bd=0,
+            cursor="hand2",
+        )
+
     def _divider(self, parent: tk.Widget) -> None:
         tk.Frame(parent, bg=T.C_BORDER, height=1).pack(fill="x", padx=T.PAD_H, pady=(0, 4))
 
@@ -260,7 +273,7 @@ class LeftPanel:
         try:
             img_tk = media_utils.extract_thumbnail(video_path)
             if img_tk:
-                self._preview_label.img = img_tk
+                self._thumbnail_ref = img_tk  # prevent GC
                 self._preview_label.config(image=img_tk)
         except Exception as exc:
             print(f"Thumbnail error: {exc}")
