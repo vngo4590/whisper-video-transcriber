@@ -2,3 +2,4 @@ openai-whisper
 ffmpeg-python
 opencv-python
 pillow
+anthropic

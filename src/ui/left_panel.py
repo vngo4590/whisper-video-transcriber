@@ -13,7 +13,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
 from src import media_utils
-from src.models import DEFAULT_EXPORT_FORMAT, DEFAULT_MAX_WORDS_PER_LINE, DEFAULT_MODEL, MEDIA_FILE_TYPES, WHISPER_MODELS, ExportFormat
+from src.models import CLAUDE_MODELS, DEFAULT_CLAUDE_MODEL, DEFAULT_EXPORT_FORMAT, DEFAULT_MAX_CLIPS, DEFAULT_MAX_WORDS_PER_LINE, DEFAULT_MODEL, MEDIA_FILE_TYPES, WHISPER_MODELS, ExportFormat
 import src.ui.theme as T
 
 
@@ -35,13 +35,17 @@ class LeftPanel:
                                        do_translate, max_words_per_line)``.
     """
 
-    def __init__(self, parent: tk.Widget, on_transcribe):
+    def __init__(self, parent: tk.Widget, on_transcribe, on_generate_clips):
         self._on_transcribe = on_transcribe
+        self._on_generate_clips = on_generate_clips
         self._selected_path = tk.StringVar()
         self._export_format_var = tk.StringVar(value=DEFAULT_EXPORT_FORMAT.value)
         self._max_words_var = tk.IntVar(value=DEFAULT_MAX_WORDS_PER_LINE)
         self._translate_var = tk.BooleanVar(value=False)
         self._model_choice = tk.StringVar(value=DEFAULT_MODEL)
+        self._max_clips_var = tk.IntVar(value=DEFAULT_MAX_CLIPS)
+        self._api_key_var = tk.StringVar()
+        self._claude_model_var = tk.StringVar(value=DEFAULT_CLAUDE_MODEL.label)
 
         self._build(parent)
 
@@ -61,11 +65,17 @@ class LeftPanel:
         self._max_words_spinbox.config(state=btn)
         self._translate_checkbox.config(state=btn)
         self._model_menu.config(state=combo)
+        self._clips_button.config(state=btn)
+        self._max_clips_spinbox.config(state=btn)
+        self._api_key_entry.config(state=btn)
+        self._claude_model_menu.config(state=combo)
 
         if busy:
             self._confirm_button.config(bg=T.C_ACCENT_D, cursor="")
+            self._clips_button.config(bg=T.C_ACCENT_D, cursor="")
         else:
             self._confirm_button.config(bg=T.C_ACCENT, cursor="hand2")
+            self._clips_button.config(bg=T.C_ACCENT, cursor="hand2")
 
     def show_loading(self, visible: bool) -> None:
         """Toggle the progress bar and status label."""
@@ -197,6 +207,77 @@ class LeftPanel:
         _hover(self._confirm_button, T.C_ACCENT, T.C_ACCENT_H)
 
         # ================================================================
+        # GENERATE CLIPS section
+        # ================================================================
+        tk.Frame(inner, bg=T.C_BORDER, height=1).pack(fill="x", padx=T.PAD_H, pady=(14, 0))
+        self._section_label(inner, "GENERATE CLIPS")
+        clips_card = self._card(inner)
+
+        # API key
+        tk.Label(clips_card, text="Anthropic API key", font=T.FONT_LABEL,
+                 bg=T.C_CARD, fg=T.C_TEXT_2).pack(anchor="w")
+        self._api_key_entry = tk.Entry(
+            clips_card,
+            textvariable=self._api_key_var,
+            show="•",
+            font=T.FONT_LABEL,
+            bg=T.C_BG,
+            fg=T.C_TEXT_1,
+            insertbackground=T.C_TEXT_1,
+            relief="flat",
+            highlightthickness=1,
+            highlightbackground=T.C_BORDER,
+            highlightcolor=T.C_ACCENT,
+        )
+        self._api_key_entry.pack(fill="x", pady=(4, 10))
+
+        # Claude model selector
+        tk.Label(clips_card, text="Claude model", font=T.FONT_LABEL,
+                 bg=T.C_CARD, fg=T.C_TEXT_2).pack(anchor="w")
+        self._claude_model_menu = ttk.Combobox(
+            clips_card,
+            textvariable=self._claude_model_var,
+            state="readonly",
+            values=[f"{m.label}  ·  {m.cost_tier}" for m in CLAUDE_MODELS],
+            style="Dark.TCombobox",
+        )
+        self._claude_model_menu.pack(fill="x", pady=(4, 10))
+
+        # Clip count spinbox
+        clips_row = tk.Frame(clips_card, bg=T.C_CARD)
+        clips_row.pack(fill="x", pady=(0, 10))
+        tk.Label(clips_row, text="Number of clips", font=T.FONT_LABEL,
+                 bg=T.C_CARD, fg=T.C_TEXT_2).pack(side="left")
+        self._max_clips_spinbox = tk.Spinbox(
+            clips_row, from_=1, to=10, textvariable=self._max_clips_var, width=4,
+            font=T.FONT_LABEL, bg=T.C_CARD, fg=T.C_TEXT_1,
+            buttonbackground=T.C_BORDER, insertbackground=T.C_TEXT_1,
+            relief="flat", highlightthickness=1,
+            highlightbackground=T.C_BORDER, highlightcolor=T.C_ACCENT,
+        )
+        self._max_clips_spinbox.pack(side="right")
+
+        # Generate Clips button
+        clips_btn_frame = tk.Frame(inner, bg=T.C_SIDEBAR)
+        clips_btn_frame.pack(fill="x", padx=T.PAD_H, pady=(8, 0))
+        self._clips_button = tk.Button(
+            clips_btn_frame,
+            text="Generate Clips",
+            command=self._handle_generate_clips,
+            font=T.FONT_BUTTON,
+            bg=T.C_ACCENT,
+            fg="#ffffff",
+            activebackground=T.C_ACCENT_H,
+            activeforeground="#ffffff",
+            relief="flat",
+            bd=0,
+            cursor="hand2",
+            pady=10,
+        )
+        self._clips_button.pack(fill="x")
+        _hover(self._clips_button, T.C_ACCENT, T.C_ACCENT_H)
+
+        # ================================================================
         # Progress / status
         # ================================================================
         prog_frame = tk.Frame(inner, bg=T.C_SIDEBAR)
@@ -277,6 +358,31 @@ class LeftPanel:
                 self._preview_label.config(image=img_tk)
         except Exception as exc:
             print(f"Thumbnail error: {exc}")
+
+    def _resolve_claude_model_id(self) -> str:
+        """Map the selected combobox label back to the Claude model ID."""
+        selected = self._claude_model_var.get()
+        for m in CLAUDE_MODELS:
+            if selected.startswith(m.label):
+                return m.model_id
+        return DEFAULT_CLAUDE_MODEL.model_id
+
+    def _handle_generate_clips(self) -> None:
+        path = self._selected_path.get()
+        if not path:
+            messagebox.showwarning("No file selected", "Please select a video file first.")
+            return
+        api_key = self._api_key_var.get().strip()
+        if not api_key:
+            messagebox.showwarning("API key required", "Please enter your Anthropic API key.")
+            return
+        self._on_generate_clips(
+            path,
+            self._model_choice.get(),
+            self._max_clips_var.get(),
+            api_key,
+            self._resolve_claude_model_id(),
+        )
 
     def _handle_transcribe(self) -> None:
         path = self._selected_path.get()
