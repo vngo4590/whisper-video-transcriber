@@ -23,6 +23,17 @@ def _get_video_duration(path: str) -> float:
     return float(probe["format"]["duration"])
 
 
+# Minimum duration (seconds) for a single segment after boundary snapping.
+# Segments shorter than this are fragments caused by overly aggressive cuts
+# and are dropped to preserve narrative flow.
+_MIN_SEGMENT_DURATION: dict[ClipMode, float] = {
+    ClipMode.SINGLE_SHOT: 1.0,   # one long clip — unlikely to trigger, but guard anyway
+    ClipMode.MULTI_CUT:   1.0,   # each stitched piece must be a full sentence
+    ClipMode.CREATIVE:    1.0,
+    ClipMode.REELS:       0.5,   # micro-cuts — complete phrase minimum
+}
+
+
 class ClipsController:
     """
     Runs the full clip-generation pipeline in a daemon thread.
@@ -30,6 +41,8 @@ class ClipsController:
     Pipeline stages:
         1. Transcribe with word timestamps
         2. Ask Claude to identify viral moments (mode-aware prompt)
+        2b. Snap boundaries to Whisper speech-segment edges (prevents mid-sentence cuts)
+        2c. Drop segments that are too short to be coherent
         3. Cut + format each clip (segment-aware, aspect-ratio-aware)
     """
 
@@ -73,7 +86,7 @@ class ClipsController:
         ).start()
 
     # ------------------------------------------------------------------
-    # Private
+    # Private — pipeline
     # ------------------------------------------------------------------
 
     def _worker(
@@ -92,9 +105,9 @@ class ClipsController:
             self._on_stage("Transcribing video…")
             model  = _whisper_module.load_model(model_name)
             result = model.transcribe(path, verbose=False, word_timestamps=True)
-            segments       = result["segments"]
-            all_words      = self._extract_words(segments)
-            timestamped    = self._build_timestamped_transcript(segments)
+            whisper_segs   = result["segments"]
+            seg_boundaries = self._build_seg_boundaries(whisper_segs)
+            timestamped    = self._build_timestamped_transcript(whisper_segs)
             video_duration = _get_video_duration(path)
 
             # ── Stage 2: Analyse with Claude ──────────────────────────
@@ -115,12 +128,21 @@ class ClipsController:
                     "Try a different model, mode, or a longer video."
                 )
 
-            # ── Stage 2b: Snap boundaries to word edges ───────────────
-            # Claude picks timestamps in seconds that may land mid-syllable.
-            # Snap every start/end to the nearest Whisper word boundary so
-            # VideoCutter never cuts in the middle of a spoken word.
-            self._on_stage("Aligning cut points to word boundaries…")
-            clips = self._snap_to_word_boundaries(clips, all_words, video_duration)
+            # ── Stage 2b: Snap to speech-segment boundaries ───────────
+            # Claude's timestamps may land mid-sentence. Snapping to Whisper
+            # segment boundaries ensures every cut lands in silence between
+            # natural speech phrases — never inside a sentence.
+            self._on_stage("Aligning cuts to speech boundaries…")
+            clips = self._snap_boundaries(clips, seg_boundaries, video_duration)
+
+            # ── Stage 2c: Drop segments too short to be coherent ──────
+            clips = self._filter_short_segments(clips, clip_mode)
+
+            if not clips:
+                raise ValueError(
+                    "All clip segments were too short after boundary alignment. "
+                    "Try a longer video or a different clip mode."
+                )
 
             # ── Stage 3: Cut each clip ────────────────────────────────
             for i, clip in enumerate(clips, start=1):
@@ -144,110 +166,135 @@ class ClipsController:
         finally:
             self._on_done()
 
-    @staticmethod
-    def _extract_words(segments: list) -> list[dict]:
-        """
-        Flatten all Whisper word-level timestamps into one list sorted by start.
-
-        Each entry: {"start": float, "end": float}
-        Returns an empty list when word timestamps are unavailable.
-        """
-        words: list[dict] = []
-        for seg in segments:
-            for w in seg.get("words", []):
-                if "start" in w and "end" in w:
-                    words.append({"start": float(w["start"]), "end": float(w["end"])})
-        return words
+    # ------------------------------------------------------------------
+    # Private — boundary helpers
+    # ------------------------------------------------------------------
 
     @staticmethod
-    def _snap_to_word_boundaries(
+    def _build_seg_boundaries(whisper_segments: list) -> list[dict]:
+        """
+        Extract start/end timestamps from every Whisper speech segment.
+
+        Whisper segments are the primary semantic unit — each represents a
+        natural spoken phrase separated by a pause. Using these as snap targets
+        ensures cuts land in silence between complete thoughts, not mid-sentence.
+        """
+        return [
+            {"start": float(s["start"]), "end": float(s["end"])}
+            for s in whisper_segments
+        ]
+
+    @staticmethod
+    def _snap_boundaries(
         clips: list[ClipResult],
-        words: list[dict],
+        boundaries: list[dict],
         video_duration: float,
     ) -> list[ClipResult]:
         """
-        Snap every segment start/end to the nearest word boundary.
+        Snap every segment start/end to the nearest speech-segment boundary.
 
-        Rules:
-          start → beginning of the first word whose END is ≥ requested time,
-                  subject to strictly_after: words already covered by the
-                  previous segment in the same clip are skipped so no word
-                  is ever repeated at a cut boundary (the jitter bug).
-          end   → ending of the last word whose START is ≤ requested time.
+        start → beginning of the first speech segment whose END >= requested
+                (snaps back into a segment we're inside, or forward to the next)
+        end   → end of the last speech segment whose START <= requested
+                (extends to complete a segment we're inside, or retreats to previous)
 
-        Segments that become invalid after snapping (end ≤ start) are dropped.
-        Clips that lose all segments keep their original segments as a fallback.
+        The strictly_after guard on start prevents any speech segment from being
+        included twice in consecutive cuts (eliminates the repeated-word jitter bug).
+
+        Segments where end <= start after snapping are dropped as invalid fragments.
+        Clips that lose all segments retain their original segments as a fallback.
         """
-        if not words:
-            return clips   # no word data — leave boundaries as-is
+        if not boundaries:
+            return clips
 
         for clip in clips:
             snapped: list[Segment] = []
-            # prev_end tracks the snapped end of the previous segment so
-            # _snap_start can skip words already included there.
             prev_end: float = -1.0
 
             for seg in clip.segments:
-                s = ClipsController._snap_start(seg.start, words, strictly_after=prev_end)
-                e = ClipsController._snap_end(seg.end, words, video_duration)
+                s = ClipsController._snap_start(seg.start, boundaries, strictly_after=prev_end)
+                e = ClipsController._snap_end(seg.end, boundaries, video_duration)
                 if e > s:
                     snapped.append(Segment(s, e))
-                    prev_end = e   # update guard for the next segment
+                    prev_end = e
 
             if snapped:
                 clip.segments = snapped
-            # else: keep original segments (safety fallback)
         return clips
 
     @staticmethod
     def _snap_start(
         requested: float,
-        words: list[dict],
+        boundaries: list[dict],
         strictly_after: float = -1.0,
     ) -> float:
         """
-        Return the START of the first word that satisfies both:
-          1. word.start > strictly_after  (not already in the previous segment)
-          2. word.end   >= requested      (the word spans or follows the cut point)
+        Return the START of the first boundary entry that:
+          1. has not already been covered  (entry.start > strictly_after)
+          2. spans or follows the cut point (entry.end >= requested)
 
-        If no word satisfies both conditions, fall back to the start of the
-        first word not yet used (strictly_after guard only), so we never
-        return a timestamp that re-enters an already-covered region.
+        Falls back to the first uncovered entry so we never regress into an
+        already-included region.
         """
         first_unused: float | None = None
-        for w in words:
-            if w["start"] <= strictly_after:
-                continue                        # already covered — skip
+        for b in boundaries:
+            if b["start"] <= strictly_after:
+                continue
             if first_unused is None:
-                first_unused = w["start"]       # earliest available word
-            if w["end"] >= requested:
-                return w["start"]               # correct snap target found
-        # No word satisfied condition 2 — use earliest available as fallback
+                first_unused = b["start"]
+            if b["end"] >= requested:
+                return b["start"]
         return first_unused if first_unused is not None else requested
 
     @staticmethod
-    def _snap_end(requested: float, words: list[dict], video_duration: float) -> float:
+    def _snap_end(
+        requested: float,
+        boundaries: list[dict],
+        video_duration: float,
+    ) -> float:
         """
-        Return the END of the last word whose start is <= *requested*.
+        Return the END of the last boundary entry whose START <= requested.
 
-        Walking forwards, we keep updating `best` with each word that has
-        already started by *requested*. The final value is the end of the
-        last word that was at least partially spoken before the cut point —
-        either the word we're inside (extend to its end) or the previous word
-        (retreat to its end) if we landed in a silence gap.
+        Extends through any entry we're inside (so a word/segment started
+        before the cut point is always finished), or retreats to the previous
+        entry's end when the cut falls in silence.
         """
         best = requested
-        for w in words:
-            if w["start"] <= requested:
-                best = w["end"]
+        for b in boundaries:
+            if b["start"] <= requested:
+                best = b["end"]
         return min(best, video_duration)
+
+    @staticmethod
+    def _filter_short_segments(
+        clips: list[ClipResult],
+        clip_mode: ClipMode,
+    ) -> list[ClipResult]:
+        """
+        Drop segments shorter than the mode-specific minimum duration.
+
+        Short segments after snapping are noise — fragments of a sentence that
+        don't convey a complete thought and make edits feel choppy.
+        Clips that lose all segments after filtering are removed entirely.
+        """
+        min_dur = _MIN_SEGMENT_DURATION.get(clip_mode, 5.0)
+        valid_clips: list[ClipResult] = []
+        for clip in clips:
+            clip.segments = [s for s in clip.segments if s.duration >= min_dur]
+            if clip.segments:
+                valid_clips.append(clip)
+        return valid_clips
+
+    # ------------------------------------------------------------------
+    # Private — transcript builder
+    # ------------------------------------------------------------------
 
     @staticmethod
     def _build_timestamped_transcript(segments: list) -> str:
         """
-        Build a Claude-readable transcript with explicit start→end timestamps
-        and [SILENCE: X.Xs] markers between segments so the model knows exactly
-        where dead air lives and can avoid including it in clip boundaries.
+        Build a Claude-readable transcript with explicit start/end timestamps
+        and [SILENCE] markers so the model knows exactly where cut boundaries
+        are safe to place.
         """
         def fmt(secs: float) -> str:
             m, s = divmod(int(secs), 60)
@@ -255,7 +302,7 @@ class ClipsController:
             frac = int((secs - int(secs)) * 10)
             return f"{h:02d}:{m:02d}:{s:02d}.{frac}"
 
-        lines = []
+        lines: list[str] = []
         prev_end: float | None = None
 
         for seg in segments:
@@ -267,7 +314,7 @@ class ClipsController:
                 if gap > 0.3:
                     lines.append(f"[SILENCE: {gap:.1f}s]")
 
-            lines.append(f"[{fmt(start)} → {fmt(end)}]  {seg['text'].strip()}")
+            lines.append(f"[{fmt(start)} -> {fmt(end)}]  {seg['text'].strip()}")
             prev_end = end
 
         return "\n".join(lines)

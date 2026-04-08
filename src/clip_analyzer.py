@@ -34,11 +34,19 @@ ABSOLUTE RULES — apply to every clip in every mode:
    Start on a strong, meaningful word.
 4. ENERGY — Prefer segments from high-confidence, fast-paced speech.
    Avoid monotone or trailing-off sections.
+5. BOUNDARY ALIGNMENT — Your start times must equal a [start] timestamp
+   and your end times must equal an [end] timestamp from the transcript.
+   Never place a boundary in the middle of a speech segment line — doing
+   so cuts a sentence in half and breaks the narrative.
+6. COMPLETE THOUGHTS — Every segment must begin and end on a complete
+   sentence or self-contained idea. If a speaker is mid-explanation,
+   include the full explanation rather than cutting it off. A viewer who
+   feels a point was interrupted will stop watching.
 
-TRANSCRIPT FORMAT (shown before every transcript):
-- Each line: [HH:MM:SS.f → HH:MM:SS.f]  spoken text
-- [SILENCE: X.Xs] = dead air — your segment boundaries must never overlap these.
-- Use the exact float second values from the timestamps as start/end in your JSON.
+TRANSCRIPT FORMAT:
+- Each line: [HH:MM:SS.f -> HH:MM:SS.f]  spoken text
+- [SILENCE: X.Xs] = dead air between speech lines
+- Use the exact start/end float values from the timestamps as your JSON values.
 
 Your output must be ONLY a single valid JSON object — no markdown fences, \
 no explanation, no extra keys. Any deviation will break the pipeline.
@@ -51,11 +59,16 @@ no explanation, no extra keys. Any deviation will break the pipeline.
 
 _EDITING_RULES = """
 EDITING RULES (mandatory for all clips):
-- Skip every [SILENCE] gap — set segment end to the last word before silence,
-  set next segment start to the first word after silence.
-- If the speaker repeats an idea, include only the sharpest version.
-- Never start a clip on a filler word (um, uh, so, like, you know, basically).
-- Prefer the most energetic, confident delivery windows.
+- BOUNDARIES: Start times must match a [start] value and end times must match
+  an [end] value from the transcript. Never cut inside a speech segment line.
+- COMPLETE THOUGHTS: Each segment must end on a complete sentence or idea.
+  If a speaker is mid-point, include the rest of that point before cutting.
+- SILENCE: Never straddle a [SILENCE] marker — end before it, start after it.
+- REPETITION: Keep only the clearest delivery when an idea is repeated.
+- FILLERS: Never open on "um", "uh", "so", "like", "you know", "basically".
+- ENERGY: Prefer high-confidence, fast-paced delivery windows.
+- REPETITIVE PHRASES: If a point is made multiple times or the speaker repeats themselves, pick the most energetic delivery and cut the rest.
+- FLOW: The segments you choose should flow together naturally when stitched, even if they are non-chronological. The combined narrative should be clear and compelling on its own.
 """
 
 
@@ -171,12 +184,17 @@ filler word, and make the viewer feel immediate energy from frame one.
 Design {max_clips} Reels assembled from micro-cuts stitched together.
 
 REELS-SPECIFIC RULES (on top of the absolute rules):
-- Max segment duration: 1.5 seconds — one punchy phrase or sentence fragment per cut
-- Min segment duration: 0.3 seconds — no ghost cuts
-- Skip every [SILENCE] marker — set the cut boundary at the nearest speech edge
+- Each cut must be one COMPLETE punchy phrase — 0.5–3 seconds per segment
+- Minimum segment duration: 0.5 seconds — no ghost cuts or sentence fragments
+- Maximum segment duration: 3 seconds — keep energy high, never linger
+- Segment boundaries must align to the speech segment timestamps in the transcript
+- Never split a sentence across two segments — finish the thought, then cut
+- Skip every [SILENCE] marker — cut boundary ends before it, starts after it
 - Never open a Reel on filler; the first word must be a hook word
 - Total assembled duration per Reel: 15–60 seconds (15–30 s is ideal)
 - End on a high note: strong claim, punchline, or open loop that demands a save
+- Do not include repetitive phrases — if a point is made multiple times, pick the most energetic delivery and cut the rest
+- The segments you choose should flow together naturally when stitched, even if they are non-chronical. The combined narrative should be clear and compelling on its own.
 
 INFLUENCER STRATEGIES — apply at least one per Reel and name it in "strategy":
 - "pattern_of_3": find where speaker lists or repeats a concept 3 times — great rhythm
