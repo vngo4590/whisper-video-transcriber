@@ -3,3 +3,4 @@ ffmpeg-python
 opencv-python
 pillow
 anthropic
+numpy

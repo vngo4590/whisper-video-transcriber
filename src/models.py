@@ -59,12 +59,14 @@ class ClipMode(Enum):
     MULTI_CUT   = "multi_cut"     # 2–5 clips merged into one result
     CREATIVE    = "creative"      # AI-directed narrative arc, non-sequential cuts
     REELS       = "reels"         # Instagram Reels: micro-cuts, silence removed, influencer strategies
+    HIGHLIGHTS  = "highlights"    # streamer mode: audio energy peaks + Claude selection
 
 CLIP_MODE_LABELS: dict[ClipMode, str] = {
     ClipMode.SINGLE_SHOT: "Single shot  —  one continuous clip",
     ClipMode.MULTI_CUT:   "Multi-cut  —  merged highlight reel",
     ClipMode.CREATIVE:    "Creative edit  —  AI narrative arc",
     ClipMode.REELS:       "Instagram Reels  —  micro-cuts, no silence",
+    ClipMode.HIGHLIGHTS:  "Highlights  —  streamer peak moments",
 }
 
 DEFAULT_CLIP_MODE = ClipMode.SINGLE_SHOT
@@ -97,6 +99,7 @@ class ClipResult:
     narrative: str = field(default="")   # creative mode arc description
     strategy:  str = field(default="")   # reels mode influencer strategy used
     cta_hint:  str = field(default="")   # reels mode suggested caption / CTA
+    peak:      str = field(default="")   # highlights mode: description of the peak moment
     output_path: str = field(default="")
 
     @property
@@ -141,6 +144,27 @@ DEFAULT_CLAUDE_MODEL = CLAUDE_MODELS[1]
 
 # ---------------------------------------------------------------------------
 # Whisper
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Word-level editing constants
+# ---------------------------------------------------------------------------
+
+FILLER_WORDS: frozenset[str] = frozenset({
+    "um", "uh", "umm", "uhh",
+    "so", "like", "you know", "basically",
+    "anyway", "right", "okay", "ok",
+    "literally", "honestly", "actually",
+    "i mean", "i guess", "sort of", "kind of",
+})
+
+# Words shorter than this (seconds) are alignment noise from Whisper and
+# should not be used as snap targets or filler candidates.
+MIN_WORD_DURATION: float = 0.05
+
+
+# ---------------------------------------------------------------------------
+# Transcription / export
 # ---------------------------------------------------------------------------
 
 DEFAULT_EXPORT_FORMAT    = ExportFormat.SRT

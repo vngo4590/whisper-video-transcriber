@@ -12,10 +12,12 @@ from typing import Any, cast
 
 import whisper as _whisper_module
 
+from src.audio_analyzer import build_energy_windows
 from src.clip_analyzer import ClipAnalyzer
 from src.models import AspectRatio, ClipMode, ClipResult, ExportFormat, Segment
 from src.transcriber import TranscriptionService
 from src.video_cutter import VideoCutter
+from src.word_refiner import build_word_index, snap_to_word_boundary, refine_all_clips
 
 
 def _get_video_duration(path: str) -> float:
@@ -32,10 +34,12 @@ class ClipsController:
     Runs the full clip-generation pipeline in a daemon thread.
 
     Pipeline stages:
-        1. Transcribe with word timestamps
+        1. Transcribe with word timestamps → seg_boundaries, word_index
+        1b. (HIGHLIGHTS mode) Audio RMS scan → energy_windows injected into transcript
         2. Ask Claude to identify viral moments (mode-aware prompt)
-        2b. Snap boundaries to Whisper speech-segment edges (skipped when "allow cut anywhere" is on)
+        2b. Snap boundaries — segment-level (default) or word-level (allow_cut_anywhere)
         2c. Drop segments that are too short to be coherent
+        2d. Word-level refinement — trim fillers, remove stutters
         3. Cut + format each clip (segment-aware, aspect-ratio-aware)
     """
 
@@ -111,8 +115,16 @@ class ClipsController:
             raw_segments = result.get("segments", [])
             whisper_segs = raw_segments if isinstance(raw_segments, list) else []
             seg_boundaries = self._build_seg_boundaries(whisper_segs)
-            timestamped    = self._build_timestamped_transcript(whisper_segs)
+            word_index     = build_word_index(whisper_segs)
             video_duration = _get_video_duration(path)
+
+            # ── Stage 1b: Audio energy scan (HIGHLIGHTS mode only) ────
+            energy_windows: list[dict] = []
+            if clip_mode is ClipMode.HIGHLIGHTS:
+                self._on_stage("Scanning audio energy…")
+                energy_windows = build_energy_windows(path, whisper_segs)
+
+            timestamped = self._build_timestamped_transcript(whisper_segs, energy_windows)
 
             # ── Stage 2: Analyse with Claude ──────────────────────────
             self._on_stage("Analysing transcript with Claude…")
@@ -133,12 +145,14 @@ class ClipsController:
                     "Try a different model, mode, or a longer video."
                 )
 
-            # ── Stage 2b: Snap to speech-segment boundaries ───────────
-            # Skipped when "allow cut anywhere" is on — Claude's timestamps
-            # are used as-is, provided they land on a full word boundary.
+            # ── Stage 2b: Snap to speech-segment or word boundaries ───
             if not allow_cut_anywhere:
                 self._on_stage("Aligning cuts to speech boundaries…")
                 clips = self._snap_boundaries(clips, seg_boundaries, video_duration)
+            elif word_index:
+                # Free-cut mode: still snap to word edges — never mid-phoneme
+                self._on_stage("Snapping cuts to word boundaries…")
+                clips = snap_to_word_boundary(clips, word_index, video_duration)
 
             # ── Stage 2c: Drop segments too short to be coherent ──────
             clips = self._filter_short_segments(clips, min_segment_duration)
@@ -146,6 +160,19 @@ class ClipsController:
             if not clips:
                 raise ValueError(
                     "All clip segments were too short after boundary alignment. "
+                    "Try a longer video or a different clip mode."
+                )
+
+            # ── Stage 2d: Word-level refinement ───────────────────────
+            # Trim leading/trailing filler words and remove stutter runs.
+            # Skipped gracefully when Whisper returned no word timestamps.
+            if word_index:
+                self._on_stage("Removing fillers and stutters…")
+                clips = refine_all_clips(clips, word_index, min_segment_duration)
+
+            if not clips:
+                raise ValueError(
+                    "All segments were removed during word-level refinement. "
                     "Try a longer video or a different clip mode."
                 )
 
@@ -294,11 +321,16 @@ class ClipsController:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _build_timestamped_transcript(segments: list) -> str:
+    def _build_timestamped_transcript(
+        segments: list,
+        energy_windows: list[dict] | None = None,
+    ) -> str:
         """
-        Build a Claude-readable transcript with explicit start/end timestamps
-        and [SILENCE] markers so the model knows exactly where cut boundaries
-        are safe to place.
+        Build a Claude-readable transcript with explicit start/end timestamps,
+        [SILENCE] markers, and optional [PEAK] markers for HIGHLIGHTS mode.
+
+        PEAK markers are injected inline at the correct chronological position
+        so Claude can correlate high-energy moments with the surrounding speech.
         """
         def fmt(secs: float) -> str:
             m, s = divmod(int(secs), 60)
@@ -306,19 +338,39 @@ class ClipsController:
             frac = int((secs - int(secs)) * 10)
             return f"{h:02d}:{m:02d}:{s:02d}.{frac}"
 
+        peaks = sorted(energy_windows or [], key=lambda p: p["start"])
+        peak_idx = 0
         lines: list[str] = []
         prev_end: float | None = None
 
         for seg in segments:
-            start = seg["start"]
-            end   = seg["end"]
+            start = float(seg["start"])
+            end   = float(seg["end"])
 
             if prev_end is not None:
                 gap = start - prev_end
                 if gap > 0.3:
                     lines.append(f"[SILENCE: {gap:.1f}s]")
 
+            # Insert any PEAK markers that begin before this speech segment
+            while peak_idx < len(peaks) and peaks[peak_idx]["start"] <= start:
+                p = peaks[peak_idx]
+                lines.append(
+                    f"[PEAK: {p['start']:.1f}s\u2013{p['end']:.1f}s, "
+                    f"+{p['above_mean_db']:.1f}dB above mean]"
+                )
+                peak_idx += 1
+
             lines.append(f"[{fmt(start)} -> {fmt(end)}]  {seg['text'].strip()}")
             prev_end = end
+
+        # Append any peaks that fall after the last speech segment
+        while peak_idx < len(peaks):
+            p = peaks[peak_idx]
+            lines.append(
+                f"[PEAK: {p['start']:.1f}s\u2013{p['end']:.1f}s, "
+                f"+{p['above_mean_db']:.1f}dB above mean]"
+            )
+            peak_idx += 1
 
         return "\n".join(lines)

@@ -56,6 +56,7 @@ _TEMPLATES: dict[ClipMode, str] = {
     ClipMode.MULTI_CUT:   _PROMPTS["MULTI_CUT_TEMPLATE"],
     ClipMode.CREATIVE:    _PROMPTS["CREATIVE_TEMPLATE"],
     ClipMode.REELS:       _PROMPTS["REELS_TEMPLATE"],
+    ClipMode.HIGHLIGHTS:  _PROMPTS["HIGHLIGHTS_TEMPLATE"],
 }
 
 
@@ -172,6 +173,7 @@ class ClipAnalyzer:
                 narrative = str(item.get("narrative", "")),
                 strategy  = str(item.get("strategy",  "")),
                 cta_hint  = str(item.get("cta_hint",  "")),
+                peak      = str(item.get("peak",      "")),
             ))
         return results
 
@@ -188,7 +190,7 @@ class ClipAnalyzer:
             except (KeyError, TypeError, ValueError):
                 return []
 
-        # MULTI_CUT, CREATIVE, and REELS all use a "segments" array
+        # MULTI_CUT, CREATIVE, REELS, and HIGHLIGHTS all use a "segments" array
         raw_segs = item.get("segments", [])
         if not raw_segs:
             return []

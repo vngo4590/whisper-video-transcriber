@@ -6,7 +6,8 @@
       "Bash(pip:*)",
       "Bash(gh:*)",
       "Bash(npm:*)",
-      "Bash(git:*)"
+      "Bash(git:*)",
+      "Bash(grep:*)"
     ]
   }
 }

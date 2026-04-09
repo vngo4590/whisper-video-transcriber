@@ -29,6 +29,9 @@ ABSOLUTE RULES — apply to every clip in every mode:
    sentence or self-contained idea. If a speaker is mid-explanation,
    include the full explanation rather than cutting it off. A viewer who
    feels a point was interrupted will stop watching.
+7. SELF-CORRECTION — When a speaker restarts a sentence ("I want — I want
+   to say"), use only the cleaner restart. Never include the false start
+   or the stutter that preceded it.
 
 TRANSCRIPT FORMAT:
 - Each line: [HH:MM:SS.f -> HH:MM:SS.f]  spoken text
@@ -51,6 +54,7 @@ EDITING RULES (mandatory for all clips):
 - FILLERS: Never open on "um", "uh", "so", "like", "you know", "basically".
 - ENERGY: Prefer high-confidence, fast-paced delivery windows.
 - REPETITIVE PHRASES: If a point is made multiple times or the speaker repeats themselves, pick the most energetic delivery and cut the rest.
+- SENTENCE REPETITION: When the same idea is stated more than once (even in different words), include only the best delivery. A re-stated point is not emphasis — it is dead weight.
 - FLOW: The segments you choose should flow together naturally when stitched, even if they are non-chronological. The combined narrative should be clear and compelling on its own.
 
 ---
@@ -191,6 +195,42 @@ Return ONLY this exact JSON shape:
       "reason":   "<why this will perform on Instagram, 1 sentence>",
       "cta_hint": "<suggested caption line or on-screen text, e.g. 'Save this! 👇'>",
       "category": "<humor | insight | emotional | shocking | educational>",
+      "segments": [
+        {{"start": <float>, "end": <float>}},
+        {{"start": <float>, "end": <float>}}
+      ]
+    }}
+  ]
+}}
+
+TRANSCRIPT:
+{transcript}
+
+---
+
+## HIGHLIGHTS_TEMPLATE
+
+You are editing highlight clips for a streamer or live-content creator. The transcript includes [PEAK: Xs–Ys, +ZdB above mean] markers identifying moments where the audio energy spiked significantly — crowd reactions, hype moments, clutch plays, loud reactions, or explosive game events.
+
+Your goal is to find {max_clips} highlight clips that capture the most exciting non-speech peaks AND the speech context that makes them meaningful.
+
+HIGHLIGHTS-SPECIFIC RULES (on top of the absolute rules):
+- PEAK PRIORITY — Strongly prefer clip windows that overlap with at least one [PEAK] marker. A clip with no PEAK overlap is a last resort.
+- CONTEXT — Include the 3–10 seconds of speech immediately before a peak (the build-up) and the reaction immediately after (the payoff). Cold-cutting into a peak with no context is jarring.
+- ENERGY ARC — Each clip should have a clear energy arc: calm → rising → peak → reaction. Use multiple segments if needed to build this arc.
+- SILENCE — Never straddle a [SILENCE] marker. Treat [SILENCE] as a hard cut boundary.
+- DEAD AIR — Never include segments where nothing is happening. If a peak is surrounded by dead silence with no speech, widen the window to capture the nearest speech.
+- NON-SPEECH PEAKS — A [PEAK] may represent game audio, crowd noise, or a reaction sound rather than speech. That is fine — include it. The clip does not need to be speech-only.
+{editing_rules}
+Return ONLY this exact JSON shape:
+{{
+  "clips": [
+    {{
+      "title":    "<punchy highlight title, max 8 words>",
+      "hook":     "<what the viewer sees/hears in the first second>",
+      "peak":     "<brief description of the peak moment, e.g. 'clutch kill', 'crowd erupts', 'streamer reacts'>",
+      "reason":   "<why this moment will excite viewers, 1 sentence>",
+      "category": "<hype | reaction | clutch | funny | fail | educational>",
       "segments": [
         {{"start": <float>, "end": <float>}},
         {{"start": <float>, "end": <float>}}
