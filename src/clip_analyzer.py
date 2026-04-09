@@ -84,6 +84,7 @@ class ClipAnalyzer:
         clip_mode: ClipMode = ClipMode.SINGLE_SHOT,
         claude_model: str = DEFAULT_CLAUDE_MODEL.model_id,
         custom_instructions: str = "",
+        prompt_override: str = "",
     ) -> list[ClipResult]:
         """
         Send the transcript to Claude and return validated ClipResult objects.
@@ -95,19 +96,31 @@ class ClipAnalyzer:
             api_key: Anthropic API key.
             clip_mode: Determines the editing strategy and prompt used.
             claude_model: Claude model ID to use.
-            custom_instructions: Optional free-text rules from the user.
+            custom_instructions: Optional free-text appended to the mode template.
+            prompt_override: If non-empty, replaces the mode template entirely.
+                             Use ``{transcript}`` as a placeholder or a bare
+                             ``TRANSCRIPT:`` header; the transcript is appended
+                             automatically when neither is present.
 
         Returns:
             List of ClipResult objects sorted by first segment start time.
         """
         client = anthropic.Anthropic(api_key=api_key)
-        template = _TEMPLATES[clip_mode]
 
-        user_message = template.format(
-            max_clips=max_clips,
-            transcript=transcript,
-            editing_rules=_EDITING_RULES,
-        )
+        if prompt_override.strip():
+            override = prompt_override.strip()
+            if "{transcript}" in override:
+                user_message = override.replace("{transcript}", transcript)
+            elif "TRANSCRIPT:" in override:
+                user_message = override          # caller already embedded it
+            else:
+                user_message = override + f"\n\nTRANSCRIPT:\n{transcript}"
+        else:
+            user_message = _TEMPLATES[clip_mode].format(
+                max_clips=max_clips,
+                transcript=transcript,
+                editing_rules=_EDITING_RULES,
+            )
 
         if custom_instructions.strip():
             user_message += (

@@ -24,15 +24,7 @@ def _get_video_duration(path: str) -> float:
     return float(probe["format"]["duration"])
 
 
-# Minimum duration (seconds) for a single segment after boundary snapping.
-# Segments shorter than this are fragments caused by overly aggressive cuts
-# and are dropped to preserve narrative flow.
-_MIN_SEGMENT_DURATION: dict[ClipMode, float] = {
-    ClipMode.SINGLE_SHOT: 1.0,   # one long clip — unlikely to trigger, but guard anyway
-    ClipMode.MULTI_CUT:   1.0,   # each stitched piece must be a full sentence
-    ClipMode.CREATIVE:    0.5,
-    ClipMode.REELS:       0.5,   # micro-cuts — complete phrase minimum
-}
+DEFAULT_MIN_SEGMENT_DURATION = 0.5   # seconds; user can override via the UI
 
 
 class ClipsController:
@@ -42,7 +34,7 @@ class ClipsController:
     Pipeline stages:
         1. Transcribe with word timestamps
         2. Ask Claude to identify viral moments (mode-aware prompt)
-        2b. Snap boundaries to Whisper speech-segment edges (prevents mid-sentence cuts)
+        2b. Snap boundaries to Whisper speech-segment edges (skipped when "allow cut anywhere" is on)
         2c. Drop segments that are too short to be coherent
         3. Cut + format each clip (segment-aware, aspect-ratio-aware)
     """
@@ -70,19 +62,26 @@ class ClipsController:
 
     def run(
         self,
-        path:                 str,
-        model_name:           str,
-        max_clips:            int,
-        api_key:              str,
-        claude_model:         str,
-        clip_mode:            ClipMode    = ClipMode.SINGLE_SHOT,
-        aspect_ratio:         AspectRatio = AspectRatio.ORIGINAL,
-        custom_instructions:  str         = "",
+        path:                  str,
+        model_name:            str,
+        max_clips:             int,
+        api_key:               str,
+        claude_model:          str,
+        clip_mode:             ClipMode    = ClipMode.SINGLE_SHOT,
+        aspect_ratio:          AspectRatio = AspectRatio.ORIGINAL,
+        custom_instructions:   str         = "",
+        allow_cut_anywhere:    bool        = False,
+        min_segment_duration:  float       = DEFAULT_MIN_SEGMENT_DURATION,
+        prompt_override:       str         = "",
     ) -> None:
         """Start the pipeline in a daemon thread; returns immediately."""
         threading.Thread(
             target=self._worker,
-            args=(path, model_name, max_clips, api_key, claude_model, clip_mode, aspect_ratio, custom_instructions),
+            args=(
+                path, model_name, max_clips, api_key, claude_model,
+                clip_mode, aspect_ratio, custom_instructions,
+                allow_cut_anywhere, min_segment_duration, prompt_override,
+            ),
             daemon=True,
         ).start()
 
@@ -92,14 +91,17 @@ class ClipsController:
 
     def _worker(
         self,
-        path:                str,
-        model_name:          str,
-        max_clips:           int,
-        api_key:             str,
-        claude_model:        str,
-        clip_mode:           ClipMode,
-        aspect_ratio:        AspectRatio,
-        custom_instructions: str,
+        path:                 str,
+        model_name:           str,
+        max_clips:            int,
+        api_key:              str,
+        claude_model:         str,
+        clip_mode:            ClipMode,
+        aspect_ratio:         AspectRatio,
+        custom_instructions:  str,
+        allow_cut_anywhere:   bool,
+        min_segment_duration: float,
+        prompt_override:      str,
     ) -> None:
         try:
             # ── Stage 1: Transcribe ────────────────────────────────────
@@ -122,6 +124,7 @@ class ClipsController:
                 clip_mode            = clip_mode,
                 claude_model         = claude_model,
                 custom_instructions  = custom_instructions,
+                prompt_override      = prompt_override,
             )
 
             if not clips:
@@ -131,14 +134,14 @@ class ClipsController:
                 )
 
             # ── Stage 2b: Snap to speech-segment boundaries ───────────
-            # Claude's timestamps may land mid-sentence. Snapping to Whisper
-            # segment boundaries ensures every cut lands in silence between
-            # natural speech phrases — never inside a sentence.
-            self._on_stage("Aligning cuts to speech boundaries…")
-            clips = self._snap_boundaries(clips, seg_boundaries, video_duration)
+            # Skipped when "allow cut anywhere" is on — Claude's timestamps
+            # are used as-is, provided they land on a full word boundary.
+            if not allow_cut_anywhere:
+                self._on_stage("Aligning cuts to speech boundaries…")
+                clips = self._snap_boundaries(clips, seg_boundaries, video_duration)
 
             # ── Stage 2c: Drop segments too short to be coherent ──────
-            clips = self._filter_short_segments(clips, clip_mode)
+            clips = self._filter_short_segments(clips, min_segment_duration)
 
             if not clips:
                 raise ValueError(
@@ -179,7 +182,7 @@ class ClipsController:
 
         Whisper segments are the primary semantic unit — each represents a
         natural spoken phrase separated by a pause. Using these as snap targets
-        ensures cuts land in silence between complete thoughts, not mid-sentence.
+        ensures cuts land in silence between complete thoughts rather than mid-word.
         """
         return [
             {"start": float(s["start"]), "end": float(s["end"])}
@@ -270,19 +273,18 @@ class ClipsController:
     @staticmethod
     def _filter_short_segments(
         clips: list[ClipResult],
-        clip_mode: ClipMode,
+        min_duration: float,
     ) -> list[ClipResult]:
         """
-        Drop segments shorter than the mode-specific minimum duration.
+        Drop segments shorter than *min_duration* seconds.
 
         Short segments after snapping are noise — fragments of a sentence that
         don't convey a complete thought and make edits feel choppy.
         Clips that lose all segments after filtering are removed entirely.
         """
-        min_dur = _MIN_SEGMENT_DURATION.get(clip_mode, 5.0)
         valid_clips: list[ClipResult] = []
         for clip in clips:
-            clip.segments = [s for s in clip.segments if s.duration >= min_dur]
+            clip.segments = [s for s in clip.segments if s.duration >= min_duration]
             if clip.segments:
                 valid_clips.append(clip)
         return valid_clips

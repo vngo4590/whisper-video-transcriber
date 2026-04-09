@@ -24,6 +24,12 @@ _INSTRUCTIONS_PLACEHOLDER = (
     "Keep clips under 45 s. Avoid political topics."
 )
 
+_OVERRIDE_PLACEHOLDER = (
+    "Paste your full replacement prompt here. Use {transcript} where you want "
+    "the transcript injected, or it will be appended automatically. "
+    "Replaces the mode template entirely — system rules still apply."
+)
+
 
 class VideoClipsTab:
     """
@@ -49,11 +55,13 @@ class VideoClipsTab:
         self._model_var = model_var
         self._on_generate_clips = on_generate_clips
 
-        self._api_key_var      = tk.StringVar()
-        self._claude_model_var = tk.StringVar(value=DEFAULT_CLAUDE_MODEL.label)
-        self._clip_mode_var    = tk.StringVar(value=CLIP_MODE_LABELS[DEFAULT_CLIP_MODE])
-        self._aspect_ratio_var = tk.StringVar(value=ASPECT_RATIO_LABELS[DEFAULT_ASPECT_RATIO])
-        self._max_clips_var    = tk.IntVar(value=DEFAULT_MAX_CLIPS)
+        self._api_key_var          = tk.StringVar()
+        self._claude_model_var     = tk.StringVar(value=DEFAULT_CLAUDE_MODEL.label)
+        self._clip_mode_var        = tk.StringVar(value=CLIP_MODE_LABELS[DEFAULT_CLIP_MODE])
+        self._aspect_ratio_var     = tk.StringVar(value=ASPECT_RATIO_LABELS[DEFAULT_ASPECT_RATIO])
+        self._max_clips_var        = tk.IntVar(value=DEFAULT_MAX_CLIPS)
+        self._min_segment_var      = tk.DoubleVar(value=0.5)
+        self._allow_cut_anywhere_var = tk.BooleanVar(value=False)
 
         self._build(parent)
 
@@ -62,10 +70,13 @@ class VideoClipsTab:
         combo = "disabled" if busy else "readonly"
         self._api_key_entry.config(state=btn)
         self._max_clips_spinbox.config(state=btn)
+        self._min_segment_spinbox.config(state=btn)
+        self._cut_anywhere_check.config(state=btn)
         self._claude_model_menu.config(state=combo)
         self._clip_mode_menu.config(state=combo)
         self._aspect_ratio_menu.config(state=combo)
         self._instructions_text.config(state=btn)
+        self._override_text.config(state=btn)
         self._clips_button.config(
             state=btn,
             bg=T.C_ACCENT_D if busy else T.C_ACCENT,
@@ -134,6 +145,32 @@ class VideoClipsTab:
         )
         self._max_clips_spinbox.pack(side="right")
 
+        # Min segment duration
+        min_seg_row = tk.Frame(clips_card, bg=T.C_CARD)
+        min_seg_row.pack(fill="x", pady=(8, 0))
+        tk.Label(min_seg_row, text="Min. segment (s)", font=T.FONT_LABEL,
+                 bg=T.C_CARD, fg=T.C_TEXT_2).pack(side="left")
+        self._min_segment_spinbox = tk.Spinbox(
+            min_seg_row, from_=0.1, to=30.0, increment=0.1,
+            textvariable=self._min_segment_var, width=5, format="%.1f",
+            font=T.FONT_LABEL, bg=T.C_CARD, fg=T.C_TEXT_1,
+            buttonbackground=T.C_BORDER, insertbackground=T.C_TEXT_1,
+            relief="flat", highlightthickness=1,
+            highlightbackground=T.C_BORDER, highlightcolor=T.C_ACCENT,
+        )
+        self._min_segment_spinbox.pack(side="right")
+
+        # Allow cut anywhere (full word boundary only)
+        self._cut_anywhere_check = tk.Checkbutton(
+            clips_card,
+            text="Allow cut anywhere (full word)",
+            variable=self._allow_cut_anywhere_var,
+            font=T.FONT_LABEL, bg=T.C_CARD, fg=T.C_TEXT_2,
+            activebackground=T.C_CARD, activeforeground=T.C_TEXT_1,
+            selectcolor=T.C_BG, relief="flat", bd=0, cursor="hand2",
+        )
+        self._cut_anywhere_check.pack(anchor="w", pady=(8, 0))
+
         # ── Custom instructions card ───────────────────────────────────
         section_label(parent, "CUSTOM INSTRUCTIONS  (optional)")
         instr_card = card(parent)
@@ -179,6 +216,50 @@ class VideoClipsTab:
         self._instructions_text.bind("<FocusIn>",  self._on_instructions_focus_in)
         self._instructions_text.bind("<FocusOut>", self._on_instructions_focus_out)
 
+        # ── Prompt override card ───────────────────────────────────────
+        section_label(parent, "PROMPT OVERRIDE  (optional)")
+        override_card = card(parent)
+
+        tk.Label(
+            override_card,
+            text="Replace the mode template sent to Claude:",
+            font=T.FONT_SMALL, bg=T.C_CARD, fg=T.C_TEXT_2,
+            wraplength=T.SIDEBAR_W - T.PAD_H * 2 - T.PAD_CARD * 2,
+            justify="left", anchor="w",
+        ).pack(fill="x", pady=(0, 6))
+
+        override_frame = tk.Frame(override_card, bg=T.C_BORDER, padx=1, pady=1)
+        override_frame.pack(fill="x")
+
+        self._override_text = tk.Text(
+            override_frame,
+            height=6,
+            wrap=tk.WORD,
+            font=T.FONT_LABEL,
+            bg=T.C_BG,
+            fg=T.C_TEXT_3,
+            insertbackground=T.C_TEXT_1,
+            selectbackground=T.C_ACCENT,
+            selectforeground="#ffffff",
+            relief="flat",
+            bd=0,
+            padx=8,
+            pady=6,
+        )
+        override_scrollbar = ttk.Scrollbar(
+            override_frame, orient="vertical",
+            command=self._override_text.yview,
+            style="Sidebar.Vertical.TScrollbar",
+        )
+        self._override_text.configure(yscrollcommand=override_scrollbar.set)
+        self._override_text.pack(side="left", fill="x", expand=True)
+        override_scrollbar.pack(side="right", fill="y")
+
+        self._override_text.insert("1.0", _OVERRIDE_PLACEHOLDER)
+        self._override_placeholder_active = True
+        self._override_text.bind("<FocusIn>",  self._on_override_focus_in)
+        self._override_text.bind("<FocusOut>", self._on_override_focus_out)
+
         # ── Generate Clips button ──────────────────────────────────────
         btn_frame = tk.Frame(parent, bg=T.C_SIDEBAR)
         btn_frame.pack(fill="x", padx=T.PAD_H, pady=(12, 10))
@@ -207,10 +288,27 @@ class VideoClipsTab:
             self._instructions_text.config(fg=T.C_TEXT_3)
             self._instructions_placeholder_active = True
 
+    def _on_override_focus_in(self, _event) -> None:
+        if self._override_placeholder_active:
+            self._override_text.delete("1.0", tk.END)
+            self._override_text.config(fg=T.C_TEXT_1)
+            self._override_placeholder_active = False
+
+    def _on_override_focus_out(self, _event) -> None:
+        if not self._override_text.get("1.0", tk.END).strip():
+            self._override_text.insert("1.0", _OVERRIDE_PLACEHOLDER)
+            self._override_text.config(fg=T.C_TEXT_3)
+            self._override_placeholder_active = True
+
     def _get_custom_instructions(self) -> str:
         if self._instructions_placeholder_active:
             return ""
         return self._instructions_text.get("1.0", tk.END).strip()
+
+    def _get_prompt_override(self) -> str:
+        if self._override_placeholder_active:
+            return ""
+        return self._override_text.get("1.0", tk.END).strip()
 
     # ------------------------------------------------------------------
     # Private — resolve helpers
@@ -255,4 +353,7 @@ class VideoClipsTab:
             self._resolve_clip_mode(),
             self._resolve_aspect_ratio(),
             self._get_custom_instructions(),
+            self._allow_cut_anywhere_var.get(),
+            self._min_segment_var.get(),
+            self._get_prompt_override(),
         )
