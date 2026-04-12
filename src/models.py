@@ -158,6 +158,27 @@ FILLER_WORDS: frozenset[str] = frozenset({
     "i mean", "i guess", "sort of", "kind of",
 })
 
+# Words that signal an incomplete thought at the END of a clip.
+# Ending a clip on one of these implies a continuation the viewer never hears.
+TRAILING_CONNECTORS: frozenset[str] = frozenset({
+    "and", "but", "or", "nor", "so", "yet",
+    "because", "since", "although", "though", "if", "when",
+    "where", "while", "as", "after", "before", "until", "unless",
+    "which", "who", "whom", "that",
+})
+
+# Words that imply a prior clause at the START of a clip.
+# Starting a clip on one of these makes the viewer feel dropped mid-thought.
+LEADING_CONNECTORS: frozenset[str] = frozenset({
+    "and", "but", "or", "so", "yet",
+    "however", "therefore", "thus", "hence",
+    "which", "who", "whom",
+})
+
+# Seconds of audio tail added after a word-level end snap so the natural
+# decay of the final phoneme completes before the hard cut.
+WORD_END_TAIL_BUFFER: float = 0.18
+
 # Words shorter than this (seconds) are alignment noise from Whisper and
 # should not be used as snap targets or filler candidates.
 MIN_WORD_DURATION: float = 0.05

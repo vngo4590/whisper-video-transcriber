@@ -13,7 +13,11 @@ a background thread.
 
 import string
 
-from src.models import FILLER_WORDS, MIN_WORD_DURATION, ClipResult, Segment
+from src.models import (
+    FILLER_WORDS, LEADING_CONNECTORS, MIN_WORD_DURATION,
+    TRAILING_CONNECTORS, WORD_END_TAIL_BUFFER,
+    ClipResult, Segment,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -102,7 +106,10 @@ def _snap_end_word(
     for w in word_index:
         if w["start"] <= requested:
             best = w["end"]
-    return min(best, video_duration)
+    # Add a small tail so the natural audio decay of the last phoneme
+    # completes before the hard cut — without this Whisper's tight DTW
+    # timestamps cause audible truncation of the final word.
+    return min(best + WORD_END_TAIL_BUFFER, video_duration)
 
 
 # ---------------------------------------------------------------------------
@@ -200,6 +207,90 @@ def trim_trailing_fillers(
 
 
 # ---------------------------------------------------------------------------
+# Connector trimming
+# ---------------------------------------------------------------------------
+
+def trim_trailing_connectors(
+    seg: Segment,
+    word_index: list[dict],
+    max_trim_fraction: float = 0.20,
+    max_words: int = 2,
+) -> Segment:
+    """
+    Retreat seg.end past any trailing connector words.
+
+    A clip that ends on "and", "because", "which", etc. signals an incomplete
+    thought to the viewer.  This retreats the end to just before the last such
+    word, leaving a clean sentence-final boundary.
+
+    Never trims more than max_trim_fraction of the segment's original duration,
+    and trims at most max_words words, to prevent catastrophic over-trimming.
+    """
+    words_in_seg = _words_in_segment(seg, word_index)
+    if not words_in_seg:
+        return seg
+
+    max_trim = seg.duration * max_trim_fraction
+    new_end = seg.end
+    removed = 0
+
+    while removed < max_words and words_in_seg:
+        last = words_in_seg[-1]
+        if _normalize(last["word"]) in TRAILING_CONNECTORS:
+            candidate = last["start"]
+            if seg.end - candidate <= max_trim:
+                new_end = candidate
+                words_in_seg = words_in_seg[:-1]
+                removed += 1
+                continue
+        break
+
+    if new_end <= seg.start:
+        return seg
+    return Segment(seg.start, new_end)
+
+
+def trim_leading_connectors(
+    seg: Segment,
+    word_index: list[dict],
+    max_trim_fraction: float = 0.15,
+    max_words: int = 1,
+) -> Segment:
+    """
+    Advance seg.start past any leading connector words.
+
+    A clip that opens on "and", "however", "which", etc. implies a prior
+    clause the viewer never heard.  This advances the start to the next word,
+    dropping the dangling connector.
+
+    Limited to max_words removals (default 1) so legitimate sentence-opening
+    conjunctions are not aggressively stripped.
+    """
+    words_in_seg = _words_in_segment(seg, word_index)
+    if not words_in_seg:
+        return seg
+
+    max_trim = seg.duration * max_trim_fraction
+    new_start = seg.start
+    removed = 0
+
+    while removed < max_words and words_in_seg:
+        first = words_in_seg[0]
+        if _normalize(first["word"]) in LEADING_CONNECTORS:
+            next_start = words_in_seg[1]["start"] if len(words_in_seg) > 1 else seg.end
+            if next_start - seg.start <= max_trim:
+                new_start = next_start
+                words_in_seg = words_in_seg[1:]
+                removed += 1
+                continue
+        break
+
+    if new_start >= seg.end:
+        return seg
+    return Segment(new_start, seg.end)
+
+
+# ---------------------------------------------------------------------------
 # Stutter removal
 # ---------------------------------------------------------------------------
 
@@ -270,9 +361,11 @@ def refine_clip(
     Apply filler trimming then stutter removal to every segment in the clip.
 
     Order per segment:
-      1. trim_leading_fillers  — advance start past opening fillers
-      2. trim_trailing_fillers — retreat end before closing fillers
-      3. remove_stutters       — may expand one segment into several sub-segs
+      1. trim_leading_fillers     — advance start past opening fillers
+      2. trim_leading_connectors  — advance start past dangling conjunctions
+      3. trim_trailing_fillers    — retreat end before closing fillers
+      4. trim_trailing_connectors — retreat end past dangling conjunctions
+      5. remove_stutters          — may expand one segment into several sub-segs
 
     clip.segments is mutated in place (matches the existing pattern in
     _snap_boundaries and _filter_short_segments).
@@ -280,7 +373,9 @@ def refine_clip(
     refined: list[Segment] = []
     for seg in clip.segments:
         seg = trim_leading_fillers(seg, word_index)
+        seg = trim_leading_connectors(seg, word_index)
         seg = trim_trailing_fillers(seg, word_index)
+        seg = trim_trailing_connectors(seg, word_index)
         refined.extend(remove_stutters(seg, word_index, min_sub_segment_duration))
     clip.segments = refined
     return clip
