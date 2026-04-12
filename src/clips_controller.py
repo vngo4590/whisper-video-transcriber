@@ -12,9 +12,9 @@ from typing import Any, cast
 
 import whisper as _whisper_module
 
-from src.audio_analyzer import build_energy_windows
 from src.clip_analyzer import ClipAnalyzer
-from src.models import AspectRatio, ClipMode, ClipResult, ExportFormat, Segment
+from src.models import AnalysisStrategy, AspectRatio, ClipMode, ClipResult, ExportFormat, Segment
+from src.moment_detector import detect_moments
 from src.transcriber import TranscriptionService
 from src.video_cutter import VideoCutter
 from src.word_refiner import build_word_index, snap_to_word_boundary, refine_all_clips
@@ -77,6 +77,7 @@ class ClipsController:
         allow_cut_anywhere:    bool        = False,
         min_segment_duration:  float       = DEFAULT_MIN_SEGMENT_DURATION,
         prompt_override:       str         = "",
+        analysis_strategies:   set         = None,
     ) -> None:
         """Start the pipeline in a daemon thread; returns immediately."""
         threading.Thread(
@@ -85,6 +86,7 @@ class ClipsController:
                 path, model_name, max_clips, api_key, claude_model,
                 clip_mode, aspect_ratio, custom_instructions,
                 allow_cut_anywhere, min_segment_duration, prompt_override,
+                analysis_strategies or set(),
             ),
             daemon=True,
         ).start()
@@ -106,6 +108,7 @@ class ClipsController:
         allow_cut_anywhere:   bool,
         min_segment_duration: float,
         prompt_override:      str,
+        analysis_strategies:  set,
     ) -> None:
         try:
             # ── Stage 1: Transcribe ────────────────────────────────────
@@ -118,13 +121,23 @@ class ClipsController:
             word_index     = build_word_index(whisper_segs)
             video_duration = _get_video_duration(path)
 
-            # ── Stage 1b: Audio energy scan (HIGHLIGHTS mode only) ────
-            energy_windows: list[dict] = []
-            if clip_mode is ClipMode.HIGHLIGHTS:
-                self._on_stage("Scanning audio energy…")
-                energy_windows = build_energy_windows(path, whisper_segs)
+            # ── Stage 1b: Moment analysis (strategy-driven) ───────────
+            moments: list[dict] = []
+            if analysis_strategies:
+                strategy_names = ", ".join(
+                    s.value.replace("_", " ") for s in analysis_strategies
+                )
+                self._on_stage(f"Analysing moments  ({strategy_names})…")
+                moments = detect_moments(
+                    video_path       = path,
+                    whisper_segs     = whisper_segs,
+                    strategies       = analysis_strategies,
+                    video_duration   = video_duration,
+                    api_key          = api_key,
+                    claude_model     = claude_model,
+                )
 
-            timestamped = self._build_timestamped_transcript(whisper_segs, energy_windows)
+            timestamped = self._build_timestamped_transcript(whisper_segs, moments)
 
             # ── Stage 2: Analyse with Claude ──────────────────────────
             self._on_stage("Analysing transcript with Claude…")
@@ -323,14 +336,16 @@ class ClipsController:
     @staticmethod
     def _build_timestamped_transcript(
         segments: list,
-        energy_windows: list[dict] | None = None,
+        moments: list[dict] | None = None,
     ) -> str:
         """
         Build a Claude-readable transcript with explicit start/end timestamps,
-        [SILENCE] markers, and optional [PEAK] markers for HIGHLIGHTS mode.
+        [SILENCE] markers, and optional moment markers from analysis strategies.
 
-        PEAK markers are injected inline at the correct chronological position
-        so Claude can correlate high-energy moments with the surrounding speech.
+        Moment markers (PEAK, MOTION, VISUAL, …) are injected inline at the
+        correct chronological position so Claude can correlate high-interest
+        windows with the surrounding speech.  Each moment dict must supply a
+        pre-formatted "transcript_line" string (produced by moment_detector).
         """
         def fmt(secs: float) -> str:
             m, s = divmod(int(secs), 60)
@@ -338,8 +353,8 @@ class ClipsController:
             frac = int((secs - int(secs)) * 10)
             return f"{h:02d}:{m:02d}:{s:02d}.{frac}"
 
-        peaks = sorted(energy_windows or [], key=lambda p: p["start"])
-        peak_idx = 0
+        sorted_moments = sorted(moments or [], key=lambda p: p["start"])
+        moment_idx = 0
         lines: list[str] = []
         prev_end: float | None = None
 
@@ -352,25 +367,20 @@ class ClipsController:
                 if gap > 0.3:
                     lines.append(f"[SILENCE: {gap:.1f}s]")
 
-            # Insert any PEAK markers that begin before this speech segment
-            while peak_idx < len(peaks) and peaks[peak_idx]["start"] <= start:
-                p = peaks[peak_idx]
-                lines.append(
-                    f"[PEAK: {p['start']:.1f}s\u2013{p['end']:.1f}s, "
-                    f"+{p['above_mean_db']:.1f}dB above mean]"
-                )
-                peak_idx += 1
+            # Inject any moment markers that begin before this speech segment
+            while (
+                moment_idx < len(sorted_moments)
+                and sorted_moments[moment_idx]["start"] <= start
+            ):
+                lines.append(sorted_moments[moment_idx]["transcript_line"])
+                moment_idx += 1
 
             lines.append(f"[{fmt(start)} -> {fmt(end)}]  {seg['text'].strip()}")
             prev_end = end
 
-        # Append any peaks that fall after the last speech segment
-        while peak_idx < len(peaks):
-            p = peaks[peak_idx]
-            lines.append(
-                f"[PEAK: {p['start']:.1f}s\u2013{p['end']:.1f}s, "
-                f"+{p['above_mean_db']:.1f}dB above mean]"
-            )
-            peak_idx += 1
+        # Flush any moments that fall after the last speech segment
+        while moment_idx < len(sorted_moments):
+            lines.append(sorted_moments[moment_idx]["transcript_line"])
+            moment_idx += 1
 
         return "\n".join(lines)

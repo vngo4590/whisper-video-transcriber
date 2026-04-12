@@ -167,6 +167,7 @@ class App:
         self, path, model_name, max_clips, api_key, claude_model,
         clip_mode, aspect_ratio, custom_instructions,
         allow_cut_anywhere, min_segment_duration, prompt_override,
+        analysis_strategies,
     ):
         self._clips.reset()
         self._notebook.select(1)
@@ -174,6 +175,7 @@ class App:
             path, model_name, max_clips, api_key, claude_model,
             clip_mode, aspect_ratio, custom_instructions,
             allow_cut_anywhere, min_segment_duration, prompt_override,
+            analysis_strategies,
         )
 
     def _on_clips_stage(self, text: str):

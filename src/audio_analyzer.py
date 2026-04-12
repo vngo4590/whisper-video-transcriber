@@ -81,9 +81,12 @@ def build_energy_windows(
     # Merge overlapping/adjacent peak windows into contiguous blocks
     peaks = _merge_windows(peaks)
 
-    # Keep only peaks that overlap with at least one Whisper speech segment
+    # Keep only peaks that overlap with at least one Whisper speech segment.
+    # When whisper_segs is empty (silent / non-speech video) the filter is
+    # skipped so all energy peaks are preserved for visual-only content.
     seg_ranges = [(float(s["start"]), float(s["end"])) for s in whisper_segs]
-    peaks = [p for p in peaks if _overlaps_any(p, seg_ranges)]
+    if seg_ranges:
+        peaks = [p for p in peaks if _overlaps_any(p, seg_ranges)]
 
     return peaks
 

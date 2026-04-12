@@ -12,9 +12,10 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from src.models import (
-    ASPECT_RATIO_LABELS, CLAUDE_MODELS, CLIP_MODE_LABELS,
-    DEFAULT_ASPECT_RATIO, DEFAULT_CLAUDE_MODEL, DEFAULT_CLIP_MODE, DEFAULT_MAX_CLIPS,
-    AspectRatio, ClipMode,
+    ANALYSIS_STRATEGY_LABELS, ASPECT_RATIO_LABELS, CLAUDE_MODELS, CLIP_MODE_LABELS,
+    DEFAULT_ANALYSIS_STRATEGIES, DEFAULT_ASPECT_RATIO, DEFAULT_CLAUDE_MODEL,
+    DEFAULT_CLIP_MODE, DEFAULT_MAX_CLIPS,
+    AnalysisStrategy, AspectRatio, ClipMode,
 )
 import src.ui.theme as T
 from src.ui.sidebar_widgets import card, hover, section_label
@@ -63,7 +64,17 @@ class VideoClipsTab:
         self._min_segment_var      = tk.DoubleVar(value=0.5)
         self._allow_cut_anywhere_var = tk.BooleanVar(value=False)
 
+        # One BooleanVar per strategy; defaults from models.py
+        self._strategy_vars: dict[AnalysisStrategy, tk.BooleanVar] = {
+            s: tk.BooleanVar(value=(s in DEFAULT_ANALYSIS_STRATEGIES))
+            for s in AnalysisStrategy
+        }
+        self._strategy_checkboxes: dict[AnalysisStrategy, tk.Checkbutton] = {}
+
         self._build(parent)
+
+        # Auto-check audio energy when Highlights mode is selected
+        self._clip_mode_var.trace_add("write", self._on_clip_mode_changed)
 
     def set_busy(self, busy: bool) -> None:
         btn   = "disabled" if busy else "normal"
@@ -77,6 +88,8 @@ class VideoClipsTab:
         self._aspect_ratio_menu.config(state=combo)
         self._instructions_text.config(state=btn)
         self._override_text.config(state=btn)
+        for cb in self._strategy_checkboxes.values():
+            cb.config(state=btn)
         self._clips_button.config(
             state=btn,
             bg=T.C_ACCENT_D if busy else T.C_ACCENT,
@@ -170,6 +183,30 @@ class VideoClipsTab:
             selectcolor=T.C_BG, relief="flat", bd=0, cursor="hand2",
         )
         self._cut_anywhere_check.pack(anchor="w", pady=(8, 0))
+
+        # ── Analysis strategies card ───────────────────────────────────
+        section_label(parent, "ANALYSIS STRATEGIES")
+        strategy_card = card(parent)
+
+        tk.Label(
+            strategy_card,
+            text="Inject moment signals into the transcript for Claude:",
+            font=T.FONT_SMALL, bg=T.C_CARD, fg=T.C_TEXT_2,
+            wraplength=T.SIDEBAR_W - T.PAD_H * 2 - T.PAD_CARD * 2,
+            justify="left", anchor="w",
+        ).pack(fill="x", pady=(0, 6))
+
+        for strategy in AnalysisStrategy:
+            cb = tk.Checkbutton(
+                strategy_card,
+                text=ANALYSIS_STRATEGY_LABELS[strategy],
+                variable=self._strategy_vars[strategy],
+                font=T.FONT_LABEL, bg=T.C_CARD, fg=T.C_TEXT_2,
+                activebackground=T.C_CARD, activeforeground=T.C_TEXT_1,
+                selectcolor=T.C_BG, relief="flat", bd=0, cursor="hand2",
+            )
+            cb.pack(anchor="w", pady=(2, 0))
+            self._strategy_checkboxes[strategy] = cb
 
         # ── Custom instructions card ───────────────────────────────────
         section_label(parent, "CUSTOM INSTRUCTIONS  (optional)")
@@ -335,6 +372,15 @@ class VideoClipsTab:
                 return ratio
         return DEFAULT_ASPECT_RATIO
 
+    def _on_clip_mode_changed(self, *_) -> None:
+        """Auto-check AUDIO_ENERGY when HIGHLIGHTS is selected and nothing is on."""
+        if self._resolve_clip_mode() is ClipMode.HIGHLIGHTS:
+            if not any(v.get() for v in self._strategy_vars.values()):
+                self._strategy_vars[AnalysisStrategy.AUDIO_ENERGY].set(True)
+
+    def _get_analysis_strategies(self) -> set:
+        return {s for s, var in self._strategy_vars.items() if var.get()}
+
     def _handle_submit(self) -> None:
         path = self._selected_path.get()
         if not path:
@@ -356,4 +402,5 @@ class VideoClipsTab:
             self._allow_cut_anywhere_var.get(),
             self._min_segment_var.get(),
             self._get_prompt_override(),
+            self._get_analysis_strategies(),
         )

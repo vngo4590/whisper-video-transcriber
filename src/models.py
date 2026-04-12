@@ -51,6 +51,25 @@ DEFAULT_ASPECT_RATIO = AspectRatio.R9_16
 
 
 # ---------------------------------------------------------------------------
+# Analysis strategy
+# ---------------------------------------------------------------------------
+
+class AnalysisStrategy(Enum):
+    AUDIO_ENERGY  = "audio_energy"    # RMS audio peaks
+    VISUAL_MOTION = "visual_motion"   # OpenCV frame differencing
+    VISION_MODEL  = "vision_model"    # Claude vision keyframe scoring
+
+ANALYSIS_STRATEGY_LABELS: dict[str, str] = {
+    AnalysisStrategy.AUDIO_ENERGY:  "Audio energy  (RMS peaks)",
+    AnalysisStrategy.VISUAL_MOTION: "Visual motion  (frame diff)",
+    AnalysisStrategy.VISION_MODEL:  "Vision model  (Claude keyframes)",
+}
+
+# Default: audio energy only — same behaviour as the previous HIGHLIGHTS-only path.
+DEFAULT_ANALYSIS_STRATEGIES: frozenset = frozenset({AnalysisStrategy.AUDIO_ENERGY})
+
+
+# ---------------------------------------------------------------------------
 # Clip mode
 # ---------------------------------------------------------------------------
 
