@@ -8,7 +8,9 @@
       "Bash(npm:*)",
       "Bash(git:*)",
       "Bash(grep:*)",
-      "Bash(.venv/Scripts/python.exe -c \"from src.ui.app import App; print\\('OK'\\)\")"
+      "Bash(.venv/Scripts/python.exe -c \"from src.ui.app import App; print\\('OK'\\)\")",
+      "Bash(.venv/Scripts/python.exe -c \"from src.ui.app import App; from src.config.settings import get, save; print\\('imports OK'\\); save\\(api_key='test', whisper_model='base', claude_model='claude-sonnet-4-6'\\); print\\('write OK'\\); print\\('read OK:', get\\('api_key'\\), get\\('whisper_model'\\), get\\('claude_model'\\)\\)\")",
+      "Bash(.venv/Scripts/python.exe -c \"from src.config.settings import _CONFIG_FILE; print\\(_CONFIG_FILE\\)\")"
     ]
   }
 }

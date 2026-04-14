@@ -11,6 +11,7 @@ GRASP Information Expert: sole authority on clip parameters. Reads shared
 import tkinter as tk
 from tkinter import messagebox, ttk
 
+from src.config import settings
 from src.models import (
     ANALYSIS_STRATEGY_LABELS, ASPECT_RATIO_LABELS, CLAUDE_MODELS, CLIP_MODE_LABELS,
     DEFAULT_ANALYSIS_STRATEGIES, DEFAULT_ASPECT_RATIO, DEFAULT_CLAUDE_MODEL,
@@ -56,8 +57,10 @@ class VideoClipsTab:
         self._model_var = model_var
         self._on_generate_clips = on_generate_clips
 
-        self._api_key_var          = tk.StringVar()
-        self._claude_model_var     = tk.StringVar(value=DEFAULT_CLAUDE_MODEL.label)
+        self._api_key_var          = tk.StringVar(value=settings.get("api_key", ""))
+        _saved_model               = settings.get("claude_model", DEFAULT_CLAUDE_MODEL.model_id)
+        _model_label               = next((m.label for m in CLAUDE_MODELS if m.model_id == _saved_model), DEFAULT_CLAUDE_MODEL.label)
+        self._claude_model_var     = tk.StringVar(value=_model_label)
         self._clip_mode_var        = tk.StringVar(value=CLIP_MODE_LABELS[DEFAULT_CLIP_MODE])
         self._aspect_ratio_var     = tk.StringVar(value=ASPECT_RATIO_LABELS[DEFAULT_ASPECT_RATIO])
         self._max_clips_var        = tk.IntVar(value=DEFAULT_MAX_CLIPS)
@@ -106,8 +109,17 @@ class VideoClipsTab:
         clips_card.pack_configure(pady=(14, 0))
 
         # API key
-        tk.Label(clips_card, text="Anthropic API key", font=T.FONT_LABEL,
-                 bg=T.C_CARD, fg=T.C_TEXT_2).pack(anchor="w")
+        key_label_row = tk.Frame(clips_card, bg=T.C_CARD)
+        key_label_row.pack(fill="x")
+        tk.Label(key_label_row, text="Anthropic API key", font=T.FONT_LABEL,
+                 bg=T.C_CARD, fg=T.C_TEXT_2).pack(side="left")
+        tk.Button(
+            key_label_row, text="clear cache",
+            command=self._clear_cache,
+            font=T.FONT_SMALL, bg=T.C_CARD, fg=T.C_TEXT_3,
+            activebackground=T.C_CARD, activeforeground=T.C_ERROR,
+            relief="flat", bd=0, cursor="hand2",
+        ).pack(side="right")
         self._api_key_entry = tk.Entry(
             clips_card, textvariable=self._api_key_var, show="•",
             font=T.FONT_LABEL, bg=T.C_BG, fg=T.C_TEXT_1,
@@ -348,6 +360,15 @@ class VideoClipsTab:
         return self._override_text.get("1.0", tk.END).strip()
 
     # ------------------------------------------------------------------
+    # Private — cache helpers
+    # ------------------------------------------------------------------
+
+    def _clear_cache(self) -> None:
+        settings.clear()
+        self._api_key_var.set("")
+        self._claude_model_var.set(DEFAULT_CLAUDE_MODEL.label)
+
+    # ------------------------------------------------------------------
     # Private — resolve helpers
     # ------------------------------------------------------------------
 
@@ -390,6 +411,7 @@ class VideoClipsTab:
         if not api_key:
             messagebox.showwarning("API key required", "Please enter your Anthropic API key.")
             return
+        settings.save(api_key=api_key, claude_model=self._resolve_claude_model_id())
         self._on_generate_clips(
             path,
             self._model_var.get(),

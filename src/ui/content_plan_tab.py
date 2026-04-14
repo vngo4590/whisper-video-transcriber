@@ -12,6 +12,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from src.analysis.content_planner import FOCUS_OPTIONS
+from src.config import settings
 from src.models import (
     ANALYSIS_STRATEGY_LABELS, CLAUDE_MODELS, DEFAULT_ANALYSIS_STRATEGIES,
     DEFAULT_CLAUDE_MODEL, AnalysisStrategy,
@@ -49,8 +50,10 @@ class ContentPlanTab:
         self._model_var        = model_var
         self._on_generate_plan = on_generate_plan
 
-        self._api_key_var          = tk.StringVar()
-        self._claude_model_var     = tk.StringVar(value=DEFAULT_CLAUDE_MODEL.label)
+        self._api_key_var          = tk.StringVar(value=settings.get("api_key", ""))
+        _saved_model               = settings.get("claude_model", DEFAULT_CLAUDE_MODEL.model_id)
+        _model_label               = next((m.label for m in CLAUDE_MODELS if m.model_id == _saved_model), DEFAULT_CLAUDE_MODEL.label)
+        self._claude_model_var     = tk.StringVar(value=_model_label)
         self._focus_var            = tk.StringVar(value=FOCUS_OPTIONS[0])
         self._max_highlights_var   = tk.IntVar(value=5)
         self._context_placeholder_active = True
@@ -93,8 +96,17 @@ class ContentPlanTab:
         cfg_card.pack_configure(pady=(14, 0))
 
         # API key
-        tk.Label(cfg_card, text="Anthropic API key", font=T.FONT_LABEL,
-                 bg=T.C_CARD, fg=T.C_TEXT_2).pack(anchor="w")
+        key_label_row = tk.Frame(cfg_card, bg=T.C_CARD)
+        key_label_row.pack(fill="x")
+        tk.Label(key_label_row, text="Anthropic API key", font=T.FONT_LABEL,
+                 bg=T.C_CARD, fg=T.C_TEXT_2).pack(side="left")
+        tk.Button(
+            key_label_row, text="clear cache",
+            command=self._clear_cache,
+            font=T.FONT_SMALL, bg=T.C_CARD, fg=T.C_TEXT_3,
+            activebackground=T.C_CARD, activeforeground=T.C_ERROR,
+            relief="flat", bd=0, cursor="hand2",
+        ).pack(side="right")
         self._api_key_entry = tk.Entry(
             cfg_card, textvariable=self._api_key_var, show="•",
             font=T.FONT_LABEL, bg=T.C_BG, fg=T.C_TEXT_1,
@@ -229,6 +241,15 @@ class ContentPlanTab:
         return self._context_text.get("1.0", tk.END).strip()
 
     # ------------------------------------------------------------------
+    # Private — cache helpers
+    # ------------------------------------------------------------------
+
+    def _clear_cache(self) -> None:
+        settings.clear()
+        self._api_key_var.set("")
+        self._claude_model_var.set(DEFAULT_CLAUDE_MODEL.label)
+
+    # ------------------------------------------------------------------
     # Private — resolve helpers
     # ------------------------------------------------------------------
 
@@ -251,6 +272,7 @@ class ContentPlanTab:
         if not api_key:
             messagebox.showwarning("API key required", "Please enter your Anthropic API key.")
             return
+        settings.save(api_key=api_key, claude_model=self._resolve_claude_model_id())
         self._on_generate_plan(
             path,
             self._model_var.get(),

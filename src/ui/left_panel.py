@@ -11,6 +11,7 @@ Low Coupling: LeftPanel knows nothing about Whisper or Claude — it only
 import tkinter as tk
 from tkinter import ttk
 
+from src.config import settings
 from src.models import DEFAULT_MODEL, WHISPER_MODELS
 import src.ui.theme as T
 from src.ui.content_plan_tab import ContentPlanTab
@@ -37,7 +38,7 @@ class LeftPanel:
 
     def __init__(self, parent: tk.Widget, on_transcribe, on_generate_clips, on_generate_plan) -> None:
         self._selected_path = tk.StringVar()
-        self._model_var = tk.StringVar(value=DEFAULT_MODEL)
+        self._model_var = tk.StringVar(value=settings.get("whisper_model", DEFAULT_MODEL))
         self._build(parent, on_transcribe, on_generate_clips, on_generate_plan)
 
     # ------------------------------------------------------------------
@@ -115,6 +116,7 @@ class LeftPanel:
             state="readonly", values=WHISPER_MODELS, style="Dark.TCombobox",
         )
         self._model_menu.pack(fill="x")
+        self._model_var.trace_add("write", lambda *_: settings.save(whisper_model=self._model_var.get()))
 
         # Mode notebook
         tk.Frame(inner, bg=T.C_BORDER, height=1).pack(fill="x", padx=T.PAD_H, pady=(14, 0))
