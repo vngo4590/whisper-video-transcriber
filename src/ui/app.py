@@ -17,10 +17,10 @@ from src.controllers.transcription import TranscriptionController
 from src.transcription.file_handler import FileHandler
 from src.models import ClipResult, WINDOW_SIZE, WINDOW_TITLE
 from src.transcription.service import TranscriptionService
-from src.ui.clips_panel import ClipsPanel
-from src.ui.content_plan_panel import ContentPlanPanel
-from src.ui.left_panel import LeftPanel
-from src.ui.right_panel import RightPanel
+from src.ui.panels.clips import ClipsPanel
+from src.ui.panels.content_plan import ContentPlanPanel
+from src.ui.panels.transcript import RightPanel
+from src.ui.sidebar.panel import LeftPanel
 from src.ui.theme import C_BG, C_BORDER, C_CARD, C_SIDEBAR, C_TEXT_2, SIDEBAR_W, apply_ttk_styles
 from src.clips.cutter import VideoCutter
 

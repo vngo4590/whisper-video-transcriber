@@ -14,11 +14,11 @@ from tkinter import ttk
 from src.config import settings
 from src.models import DEFAULT_MODEL, WHISPER_MODELS
 import src.ui.theme as T
-from src.ui.content_plan_tab import ContentPlanTab
-from src.ui.file_picker import FilePicker
-from src.ui.sidebar_widgets import card, divider, section_label
-from src.ui.transcribe_tab import TranscribeTab
-from src.ui.video_clips_tab import VideoClipsTab
+from src.ui.sidebar.file_picker import FilePicker
+from src.ui.sidebar.widgets import card, divider, section_label
+from src.ui.sidebar.tabs.transcribe import TranscribeTab
+from src.ui.sidebar.tabs.video_clips import VideoClipsTab
+from src.ui.sidebar.tabs.content_plan import ContentPlanTab
 
 
 class LeftPanel:

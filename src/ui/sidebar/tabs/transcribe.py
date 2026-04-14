@@ -13,7 +13,7 @@ from tkinter import messagebox, ttk
 
 from src.models import DEFAULT_EXPORT_FORMAT, DEFAULT_MAX_WORDS_PER_LINE, ExportFormat
 import src.ui.theme as T
-from src.ui.sidebar_widgets import card, hover, radiobutton, section_label
+from src.ui.sidebar.widgets import card, hover, radiobutton, section_label
 
 
 class TranscribeTab:

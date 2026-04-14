@@ -1,5 +1,5 @@
 """
-ui/sidebar_widgets.py — Reusable widget factory helpers for sidebar panels.
+ui/sidebar/widgets.py — Reusable widget factory helpers for sidebar panels.
 
 Pure layout utilities: no state, no callbacks, no business logic.
 Any panel in src/ui/ may import and use them freely.

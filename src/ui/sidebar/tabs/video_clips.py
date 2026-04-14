@@ -1,9 +1,10 @@
 """
-ui/video_clips_tab.py — Video Clips mode tab panel.
+ui/sidebar/tabs/video_clips.py — Video Clips mode tab panel.
 
-SRP: Owns all clip-generation settings (API key, Claude model, clip mode,
-     aspect ratio, clip count, custom instructions) and the Generate Clips
-     action. Has no knowledge of transcription settings.
+SRP: Owns clip-generation settings that are unique to this tab (clip mode,
+     aspect ratio, clip count, cut options, instructions, prompt override)
+     and the Generate Clips action. API key / Claude model / analysis
+     strategies are delegated to shared widgets.
 GRASP Information Expert: sole authority on clip parameters. Reads shared
      *selected_path* / *model_var* supplied by LeftPanel.
 """
@@ -11,15 +12,16 @@ GRASP Information Expert: sole authority on clip parameters. Reads shared
 import tkinter as tk
 from tkinter import messagebox, ttk
 
-from src.config import settings
 from src.models import (
-    ANALYSIS_STRATEGY_LABELS, ASPECT_RATIO_LABELS, CLAUDE_MODELS, CLIP_MODE_LABELS,
-    DEFAULT_ANALYSIS_STRATEGIES, DEFAULT_ASPECT_RATIO, DEFAULT_CLAUDE_MODEL,
+    ASPECT_RATIO_LABELS, CLIP_MODE_LABELS,
+    DEFAULT_ASPECT_RATIO,
     DEFAULT_CLIP_MODE, DEFAULT_MAX_CLIPS,
     AnalysisStrategy, AspectRatio, ClipMode,
 )
 import src.ui.theme as T
-from src.ui.sidebar_widgets import card, hover, section_label
+from src.ui.sidebar.widgets import card, hover, section_label
+from src.ui.shared.api_settings import ApiSettingsWidget
+from src.ui.shared.strategy_picker import StrategyPickerWidget
 
 _INSTRUCTIONS_PLACEHOLDER = (
     "e.g. Focus on funny moments only. Highlight any product mentions. "
@@ -43,7 +45,9 @@ class VideoClipsTab:
         model_var: Shared StringVar holding the chosen Whisper model name.
         on_generate_clips: Callback — ``on_generate_clips(path, model_name,
                            max_clips, api_key, claude_model, clip_mode,
-                           aspect_ratio, custom_instructions)``.
+                           aspect_ratio, custom_instructions,
+                           allow_cut_anywhere, min_segment_duration,
+                           prompt_override, analysis_strategies)``.
     """
 
     def __init__(
@@ -53,26 +57,15 @@ class VideoClipsTab:
         model_var: tk.StringVar,
         on_generate_clips,
     ) -> None:
-        self._selected_path = selected_path
-        self._model_var = model_var
+        self._selected_path     = selected_path
+        self._model_var         = model_var
         self._on_generate_clips = on_generate_clips
 
-        self._api_key_var          = tk.StringVar(value=settings.get("api_key", ""))
-        _saved_model               = settings.get("claude_model", DEFAULT_CLAUDE_MODEL.model_id)
-        _model_label               = next((m.label for m in CLAUDE_MODELS if m.model_id == _saved_model), DEFAULT_CLAUDE_MODEL.label)
-        self._claude_model_var     = tk.StringVar(value=_model_label)
-        self._clip_mode_var        = tk.StringVar(value=CLIP_MODE_LABELS[DEFAULT_CLIP_MODE])
-        self._aspect_ratio_var     = tk.StringVar(value=ASPECT_RATIO_LABELS[DEFAULT_ASPECT_RATIO])
-        self._max_clips_var        = tk.IntVar(value=DEFAULT_MAX_CLIPS)
-        self._min_segment_var      = tk.DoubleVar(value=0.5)
+        self._clip_mode_var          = tk.StringVar(value=CLIP_MODE_LABELS[DEFAULT_CLIP_MODE])
+        self._aspect_ratio_var       = tk.StringVar(value=ASPECT_RATIO_LABELS[DEFAULT_ASPECT_RATIO])
+        self._max_clips_var          = tk.IntVar(value=DEFAULT_MAX_CLIPS)
+        self._min_segment_var        = tk.DoubleVar(value=0.5)
         self._allow_cut_anywhere_var = tk.BooleanVar(value=False)
-
-        # One BooleanVar per strategy; defaults from models.py
-        self._strategy_vars: dict[AnalysisStrategy, tk.BooleanVar] = {
-            s: tk.BooleanVar(value=(s in DEFAULT_ANALYSIS_STRATEGIES))
-            for s in AnalysisStrategy
-        }
-        self._strategy_checkboxes: dict[AnalysisStrategy, tk.Checkbutton] = {}
 
         self._build(parent)
 
@@ -82,17 +75,15 @@ class VideoClipsTab:
     def set_busy(self, busy: bool) -> None:
         btn   = "disabled" if busy else "normal"
         combo = "disabled" if busy else "readonly"
-        self._api_key_entry.config(state=btn)
+        self._api_settings.set_busy(busy)
+        self._strategy_picker.set_busy(busy)
         self._max_clips_spinbox.config(state=btn)
         self._min_segment_spinbox.config(state=btn)
         self._cut_anywhere_check.config(state=btn)
-        self._claude_model_menu.config(state=combo)
         self._clip_mode_menu.config(state=combo)
         self._aspect_ratio_menu.config(state=combo)
         self._instructions_text.config(state=btn)
         self._override_text.config(state=btn)
-        for cb in self._strategy_checkboxes.values():
-            cb.config(state=btn)
         self._clips_button.config(
             state=btn,
             bg=T.C_ACCENT_D if busy else T.C_ACCENT,
@@ -104,39 +95,11 @@ class VideoClipsTab:
     # ------------------------------------------------------------------
 
     def _build(self, parent: tk.Widget) -> None:
-        # ── Settings card ─────────────────────────────────────────────
+        # ── Shared: API key + Claude model ────────────────────────────
+        self._api_settings = ApiSettingsWidget(parent)
+
+        # ── Clip-specific settings card ────────────────────────────────
         clips_card = card(parent)
-        clips_card.pack_configure(pady=(14, 0))
-
-        # API key
-        key_label_row = tk.Frame(clips_card, bg=T.C_CARD)
-        key_label_row.pack(fill="x")
-        tk.Label(key_label_row, text="Anthropic API key", font=T.FONT_LABEL,
-                 bg=T.C_CARD, fg=T.C_TEXT_2).pack(side="left")
-        tk.Button(
-            key_label_row, text="clear cache",
-            command=self._clear_cache,
-            font=T.FONT_SMALL, bg=T.C_CARD, fg=T.C_TEXT_3,
-            activebackground=T.C_CARD, activeforeground=T.C_ERROR,
-            relief="flat", bd=0, cursor="hand2",
-        ).pack(side="right")
-        self._api_key_entry = tk.Entry(
-            clips_card, textvariable=self._api_key_var, show="•",
-            font=T.FONT_LABEL, bg=T.C_BG, fg=T.C_TEXT_1,
-            insertbackground=T.C_TEXT_1, relief="flat",
-            highlightthickness=1, highlightbackground=T.C_BORDER, highlightcolor=T.C_ACCENT,
-        )
-        self._api_key_entry.pack(fill="x", pady=(4, 10))
-
-        # Claude model
-        tk.Label(clips_card, text="Claude model", font=T.FONT_LABEL,
-                 bg=T.C_CARD, fg=T.C_TEXT_2).pack(anchor="w")
-        self._claude_model_menu = ttk.Combobox(
-            clips_card, textvariable=self._claude_model_var, state="readonly",
-            values=[f"{m.label}  ·  {m.cost_tier}" for m in CLAUDE_MODELS],
-            style="Dark.TCombobox",
-        )
-        self._claude_model_menu.pack(fill="x", pady=(4, 10))
 
         # Clip mode
         tk.Label(clips_card, text="Clip mode", font=T.FONT_LABEL,
@@ -185,7 +148,7 @@ class VideoClipsTab:
         )
         self._min_segment_spinbox.pack(side="right")
 
-        # Allow cut anywhere (full word boundary only)
+        # Allow cut anywhere
         self._cut_anywhere_check = tk.Checkbutton(
             clips_card,
             text="Allow cut anywhere (full word)",
@@ -196,29 +159,8 @@ class VideoClipsTab:
         )
         self._cut_anywhere_check.pack(anchor="w", pady=(8, 0))
 
-        # ── Analysis strategies card ───────────────────────────────────
-        section_label(parent, "ANALYSIS STRATEGIES")
-        strategy_card = card(parent)
-
-        tk.Label(
-            strategy_card,
-            text="Inject moment signals into the transcript for Claude:",
-            font=T.FONT_SMALL, bg=T.C_CARD, fg=T.C_TEXT_2,
-            wraplength=T.SIDEBAR_W - T.PAD_H * 2 - T.PAD_CARD * 2,
-            justify="left", anchor="w",
-        ).pack(fill="x", pady=(0, 6))
-
-        for strategy in AnalysisStrategy:
-            cb = tk.Checkbutton(
-                strategy_card,
-                text=ANALYSIS_STRATEGY_LABELS[strategy],
-                variable=self._strategy_vars[strategy],
-                font=T.FONT_LABEL, bg=T.C_CARD, fg=T.C_TEXT_2,
-                activebackground=T.C_CARD, activeforeground=T.C_TEXT_1,
-                selectcolor=T.C_BG, relief="flat", bd=0, cursor="hand2",
-            )
-            cb.pack(anchor="w", pady=(2, 0))
-            self._strategy_checkboxes[strategy] = cb
+        # ── Shared: analysis strategies ────────────────────────────────
+        self._strategy_picker = StrategyPickerWidget(parent)
 
         # ── Custom instructions card ───────────────────────────────────
         section_label(parent, "CUSTOM INSTRUCTIONS  (optional)")
@@ -236,19 +178,10 @@ class VideoClipsTab:
         text_frame.pack(fill="x")
 
         self._instructions_text = tk.Text(
-            text_frame,
-            height=5,
-            wrap=tk.WORD,
-            font=T.FONT_LABEL,
-            bg=T.C_BG,
-            fg=T.C_TEXT_3,          # muted while showing placeholder
-            insertbackground=T.C_TEXT_1,
-            selectbackground=T.C_ACCENT,
-            selectforeground="#ffffff",
-            relief="flat",
-            bd=0,
-            padx=8,
-            pady=6,
+            text_frame, height=5, wrap=tk.WORD,
+            font=T.FONT_LABEL, bg=T.C_BG, fg=T.C_TEXT_3,
+            insertbackground=T.C_TEXT_1, selectbackground=T.C_ACCENT,
+            selectforeground="#ffffff", relief="flat", bd=0, padx=8, pady=6,
         )
         instr_scrollbar = ttk.Scrollbar(
             text_frame, orient="vertical",
@@ -259,7 +192,6 @@ class VideoClipsTab:
         self._instructions_text.pack(side="left", fill="x", expand=True)
         instr_scrollbar.pack(side="right", fill="y")
 
-        # Placeholder behaviour
         self._instructions_text.insert("1.0", _INSTRUCTIONS_PLACEHOLDER)
         self._instructions_placeholder_active = True
         self._instructions_text.bind("<FocusIn>",  self._on_instructions_focus_in)
@@ -281,19 +213,10 @@ class VideoClipsTab:
         override_frame.pack(fill="x")
 
         self._override_text = tk.Text(
-            override_frame,
-            height=6,
-            wrap=tk.WORD,
-            font=T.FONT_LABEL,
-            bg=T.C_BG,
-            fg=T.C_TEXT_3,
-            insertbackground=T.C_TEXT_1,
-            selectbackground=T.C_ACCENT,
-            selectforeground="#ffffff",
-            relief="flat",
-            bd=0,
-            padx=8,
-            pady=6,
+            override_frame, height=6, wrap=tk.WORD,
+            font=T.FONT_LABEL, bg=T.C_BG, fg=T.C_TEXT_3,
+            insertbackground=T.C_TEXT_1, selectbackground=T.C_ACCENT,
+            selectforeground="#ffffff", relief="flat", bd=0, padx=8, pady=6,
         )
         override_scrollbar = ttk.Scrollbar(
             override_frame, orient="vertical",
@@ -360,24 +283,8 @@ class VideoClipsTab:
         return self._override_text.get("1.0", tk.END).strip()
 
     # ------------------------------------------------------------------
-    # Private — cache helpers
-    # ------------------------------------------------------------------
-
-    def _clear_cache(self) -> None:
-        settings.clear()
-        self._api_key_var.set("")
-        self._claude_model_var.set(DEFAULT_CLAUDE_MODEL.label)
-
-    # ------------------------------------------------------------------
     # Private — resolve helpers
     # ------------------------------------------------------------------
-
-    def _resolve_claude_model_id(self) -> str:
-        selected = self._claude_model_var.get()
-        for m in CLAUDE_MODELS:
-            if selected.startswith(m.label):
-                return m.model_id
-        return DEFAULT_CLAUDE_MODEL.model_id
 
     def _resolve_clip_mode(self) -> ClipMode:
         selected = self._clip_mode_var.get()
@@ -396,33 +303,30 @@ class VideoClipsTab:
     def _on_clip_mode_changed(self, *_) -> None:
         """Auto-check AUDIO_ENERGY when HIGHLIGHTS is selected and nothing is on."""
         if self._resolve_clip_mode() is ClipMode.HIGHLIGHTS:
-            if not any(v.get() for v in self._strategy_vars.values()):
-                self._strategy_vars[AnalysisStrategy.AUDIO_ENERGY].set(True)
-
-    def _get_analysis_strategies(self) -> set:
-        return {s for s, var in self._strategy_vars.items() if var.get()}
+            if not self._strategy_picker.any_enabled():
+                self._strategy_picker.set_strategy(AnalysisStrategy.AUDIO_ENERGY, True)
 
     def _handle_submit(self) -> None:
         path = self._selected_path.get()
         if not path:
             messagebox.showwarning("No file selected", "Please select a video file first.")
             return
-        api_key = self._api_key_var.get().strip()
+        api_key = self._api_settings.api_key
         if not api_key:
             messagebox.showwarning("API key required", "Please enter your Anthropic API key.")
             return
-        settings.save(api_key=api_key, claude_model=self._resolve_claude_model_id())
+        self._api_settings.save()
         self._on_generate_clips(
             path,
             self._model_var.get(),
             self._max_clips_var.get(),
             api_key,
-            self._resolve_claude_model_id(),
+            self._api_settings.claude_model_id,
             self._resolve_clip_mode(),
             self._resolve_aspect_ratio(),
             self._get_custom_instructions(),
             self._allow_cut_anywhere_var.get(),
             self._min_segment_var.get(),
             self._get_prompt_override(),
-            self._get_analysis_strategies(),
+            self._strategy_picker.selected,
         )

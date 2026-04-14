@@ -16,7 +16,7 @@ from tkinter import filedialog
 from src.media import utils as media_utils
 from src.models import MEDIA_FILE_TYPES
 import src.ui.theme as T
-from src.ui.sidebar_widgets import card, hover, section_label
+from src.ui.sidebar.widgets import card, hover, section_label
 
 
 class FilePicker:

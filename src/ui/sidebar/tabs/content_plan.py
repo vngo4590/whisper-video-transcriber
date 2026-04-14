@@ -1,24 +1,22 @@
 """
-ui/content_plan_tab.py — Content Plan mode tab panel.
+ui/sidebar/tabs/content_plan.py — Content Plan mode tab panel.
 
-SRP: Owns all content-plan settings (API key, Claude model, focus, analysis
-     strategies, context) and the Generate Plan action. Has no knowledge of
-     transcription internals or video cutting.
-GRASP Information Expert: sole authority on content-plan parameters. Reads
-     shared *selected_path* / *model_var* supplied by LeftPanel.
+SRP: Owns content-plan settings that are unique to this tab (focus,
+     max highlights, context textarea) and the Generate Plan action.
+     API key / Claude model / analysis strategies are delegated to
+     shared widgets.
+GRASP Information Expert: sole authority on content-plan parameters.
+     Reads shared *selected_path* / *model_var* supplied by LeftPanel.
 """
 
 import tkinter as tk
 from tkinter import messagebox, ttk
 
 from src.analysis.content_planner import FOCUS_OPTIONS
-from src.config import settings
-from src.models import (
-    ANALYSIS_STRATEGY_LABELS, CLAUDE_MODELS, DEFAULT_ANALYSIS_STRATEGIES,
-    DEFAULT_CLAUDE_MODEL, AnalysisStrategy,
-)
 import src.ui.theme as T
-from src.ui.sidebar_widgets import card, hover, section_label
+from src.ui.sidebar.widgets import card, hover, section_label
+from src.ui.shared.api_settings import ApiSettingsWidget
+from src.ui.shared.strategy_picker import StrategyPickerWidget
 
 _CONTEXT_PLACEHOLDER = (
     "e.g. This is a gaming stream. Focus on reaction moments and clutch plays. "
@@ -50,19 +48,9 @@ class ContentPlanTab:
         self._model_var        = model_var
         self._on_generate_plan = on_generate_plan
 
-        self._api_key_var          = tk.StringVar(value=settings.get("api_key", ""))
-        _saved_model               = settings.get("claude_model", DEFAULT_CLAUDE_MODEL.model_id)
-        _model_label               = next((m.label for m in CLAUDE_MODELS if m.model_id == _saved_model), DEFAULT_CLAUDE_MODEL.label)
-        self._claude_model_var     = tk.StringVar(value=_model_label)
-        self._focus_var            = tk.StringVar(value=FOCUS_OPTIONS[0])
-        self._max_highlights_var   = tk.IntVar(value=5)
+        self._focus_var          = tk.StringVar(value=FOCUS_OPTIONS[0])
+        self._max_highlights_var = tk.IntVar(value=5)
         self._context_placeholder_active = True
-
-        self._strategy_vars: dict[AnalysisStrategy, tk.BooleanVar] = {
-            s: tk.BooleanVar(value=(s in DEFAULT_ANALYSIS_STRATEGIES))
-            for s in AnalysisStrategy
-        }
-        self._strategy_checkboxes: dict[AnalysisStrategy, tk.Checkbutton] = {}
 
         self._build(parent)
 
@@ -73,13 +61,11 @@ class ContentPlanTab:
     def set_busy(self, busy: bool) -> None:
         btn   = "disabled" if busy else "normal"
         combo = "disabled" if busy else "readonly"
-        self._api_key_entry.config(state=btn)
+        self._api_settings.set_busy(busy)
+        self._strategy_picker.set_busy(busy)
         self._max_highlights_spinbox.config(state=btn)
-        self._claude_model_menu.config(state=combo)
         self._focus_menu.config(state=combo)
         self._context_text.config(state=btn)
-        for cb in self._strategy_checkboxes.values():
-            cb.config(state=btn)
         self._plan_button.config(
             state=btn,
             bg=T.C_ACCENT_D if busy else T.C_ACCENT,
@@ -91,40 +77,11 @@ class ContentPlanTab:
     # ------------------------------------------------------------------
 
     def _build(self, parent: tk.Widget) -> None:
-        # ── Settings card ─────────────────────────────────────────────
+        # ── Shared: API key + Claude model ────────────────────────────
+        self._api_settings = ApiSettingsWidget(parent)
+
+        # ── Content-plan-specific settings card ───────────────────────
         cfg_card = card(parent)
-        cfg_card.pack_configure(pady=(14, 0))
-
-        # API key
-        key_label_row = tk.Frame(cfg_card, bg=T.C_CARD)
-        key_label_row.pack(fill="x")
-        tk.Label(key_label_row, text="Anthropic API key", font=T.FONT_LABEL,
-                 bg=T.C_CARD, fg=T.C_TEXT_2).pack(side="left")
-        tk.Button(
-            key_label_row, text="clear cache",
-            command=self._clear_cache,
-            font=T.FONT_SMALL, bg=T.C_CARD, fg=T.C_TEXT_3,
-            activebackground=T.C_CARD, activeforeground=T.C_ERROR,
-            relief="flat", bd=0, cursor="hand2",
-        ).pack(side="right")
-        self._api_key_entry = tk.Entry(
-            cfg_card, textvariable=self._api_key_var, show="•",
-            font=T.FONT_LABEL, bg=T.C_BG, fg=T.C_TEXT_1,
-            insertbackground=T.C_TEXT_1, relief="flat",
-            highlightthickness=1, highlightbackground=T.C_BORDER,
-            highlightcolor=T.C_ACCENT,
-        )
-        self._api_key_entry.pack(fill="x", pady=(4, 10))
-
-        # Claude model
-        tk.Label(cfg_card, text="Claude model", font=T.FONT_LABEL,
-                 bg=T.C_CARD, fg=T.C_TEXT_2).pack(anchor="w")
-        self._claude_model_menu = ttk.Combobox(
-            cfg_card, textvariable=self._claude_model_var, state="readonly",
-            values=[f"{m.label}  ·  {m.cost_tier}" for m in CLAUDE_MODELS],
-            style="Dark.TCombobox",
-        )
-        self._claude_model_menu.pack(fill="x", pady=(4, 10))
 
         # Focus
         tk.Label(cfg_card, text="Focus", font=T.FONT_LABEL,
@@ -149,29 +106,8 @@ class ContentPlanTab:
         )
         self._max_highlights_spinbox.pack(side="right")
 
-        # ── Analysis strategies card ───────────────────────────────────
-        section_label(parent, "ANALYSIS STRATEGIES")
-        strategy_card = card(parent)
-
-        tk.Label(
-            strategy_card,
-            text="Inject moment signals into the transcript for Claude:",
-            font=T.FONT_SMALL, bg=T.C_CARD, fg=T.C_TEXT_2,
-            wraplength=T.SIDEBAR_W - T.PAD_H * 2 - T.PAD_CARD * 2,
-            justify="left", anchor="w",
-        ).pack(fill="x", pady=(0, 6))
-
-        for strategy in AnalysisStrategy:
-            cb = tk.Checkbutton(
-                strategy_card,
-                text=ANALYSIS_STRATEGY_LABELS[strategy],
-                variable=self._strategy_vars[strategy],
-                font=T.FONT_LABEL, bg=T.C_CARD, fg=T.C_TEXT_2,
-                activebackground=T.C_CARD, activeforeground=T.C_TEXT_1,
-                selectcolor=T.C_BG, relief="flat", bd=0, cursor="hand2",
-            )
-            cb.pack(anchor="w", pady=(2, 0))
-            self._strategy_checkboxes[strategy] = cb
+        # ── Shared: analysis strategies ────────────────────────────────
+        self._strategy_picker = StrategyPickerWidget(parent)
 
         # ── Context card ───────────────────────────────────────────────
         section_label(parent, "CONTEXT  (optional)")
@@ -241,45 +177,26 @@ class ContentPlanTab:
         return self._context_text.get("1.0", tk.END).strip()
 
     # ------------------------------------------------------------------
-    # Private — cache helpers
+    # Private — submit
     # ------------------------------------------------------------------
-
-    def _clear_cache(self) -> None:
-        settings.clear()
-        self._api_key_var.set("")
-        self._claude_model_var.set(DEFAULT_CLAUDE_MODEL.label)
-
-    # ------------------------------------------------------------------
-    # Private — resolve helpers
-    # ------------------------------------------------------------------
-
-    def _resolve_claude_model_id(self) -> str:
-        selected = self._claude_model_var.get()
-        for m in CLAUDE_MODELS:
-            if selected.startswith(m.label):
-                return m.model_id
-        return DEFAULT_CLAUDE_MODEL.model_id
-
-    def _get_analysis_strategies(self) -> set:
-        return {s for s, var in self._strategy_vars.items() if var.get()}
 
     def _handle_submit(self) -> None:
         path = self._selected_path.get()
         if not path:
             messagebox.showwarning("No file selected", "Please select a video file first.")
             return
-        api_key = self._api_key_var.get().strip()
+        api_key = self._api_settings.api_key
         if not api_key:
             messagebox.showwarning("API key required", "Please enter your Anthropic API key.")
             return
-        settings.save(api_key=api_key, claude_model=self._resolve_claude_model_id())
+        self._api_settings.save()
         self._on_generate_plan(
             path,
             self._model_var.get(),
             api_key,
-            self._resolve_claude_model_id(),
+            self._api_settings.claude_model_id,
             self._focus_var.get(),
             self._max_highlights_var.get(),
             self._get_context(),
-            self._get_analysis_strategies(),
+            self._strategy_picker.selected,
         )
