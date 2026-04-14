@@ -12,11 +12,13 @@ from tkinter import messagebox, ttk
 
 from src.clips.analyzer import ClipAnalyzer
 from src.controllers.clips import ClipsController
+from src.controllers.content_plan import ContentPlanController
 from src.controllers.transcription import TranscriptionController
 from src.transcription.file_handler import FileHandler
 from src.models import ClipResult, WINDOW_SIZE, WINDOW_TITLE
 from src.transcription.service import TranscriptionService
 from src.ui.clips_panel import ClipsPanel
+from src.ui.content_plan_panel import ContentPlanPanel
 from src.ui.left_panel import LeftPanel
 from src.ui.right_panel import RightPanel
 from src.ui.theme import C_BG, C_BORDER, C_CARD, C_SIDEBAR, C_TEXT_2, SIDEBAR_W, apply_ttk_styles
@@ -63,6 +65,13 @@ class App:
             on_done=self._on_done,
         )
 
+        self._plan_controller = ContentPlanController(
+            on_stage=self._on_plan_stage,
+            on_success=self._on_plan_success,
+            on_error=self._on_error,
+            on_done=self._on_done,
+        )
+
         self._build_layout()
 
     def run(self) -> None:
@@ -100,6 +109,7 @@ class App:
             left_frame,
             on_transcribe=self._on_transcribe_requested,
             on_generate_clips=self._on_generate_clips_requested,
+            on_generate_plan=self._on_generate_plan_requested,
         )
 
         # Right side: tabbed notebook
@@ -108,12 +118,15 @@ class App:
 
         transcript_tab = tk.Frame(self._notebook, bg=C_BG)
         clips_tab      = tk.Frame(self._notebook, bg=C_BG)
+        plan_tab       = tk.Frame(self._notebook, bg=C_BG)
 
         self._notebook.add(transcript_tab, text="  Transcript  ")
         self._notebook.add(clips_tab,      text="  Clips  ")
+        self._notebook.add(plan_tab,       text="  Content Plan  ")
 
-        self._right = RightPanel(transcript_tab)
-        self._clips = ClipsPanel(clips_tab)
+        self._right       = RightPanel(transcript_tab)
+        self._clips       = ClipsPanel(clips_tab)
+        self._plan_panel  = ContentPlanPanel(plan_tab)
 
     # ------------------------------------------------------------------
     # Private — ttk notebook dark style
@@ -188,6 +201,29 @@ class App:
 
     def _on_clips_success(self, clips: list[ClipResult]):
         self._root.after(0, lambda: self._clips.show_loading(False))
+
+    # ------------------------------------------------------------------
+    # Private — content plan callbacks
+    # ------------------------------------------------------------------
+
+    def _on_generate_plan_requested(
+        self, path, model_name, api_key, claude_model,
+        focus, max_highlights, context, analysis_strategies,
+    ):
+        self._plan_panel.reset()
+        self._notebook.select(2)
+        self._plan_controller.run(
+            path, model_name, api_key, claude_model,
+            focus, max_highlights, context, analysis_strategies,
+        )
+
+    def _on_plan_stage(self, text: str):
+        self._root.after(0, lambda: self._plan_panel.set_stage(text))
+        self._root.after(0, lambda: self._plan_panel.show_loading(True))
+
+    def _on_plan_success(self, plan_text: str):
+        self._root.after(0, lambda: self._plan_panel.set_text(plan_text))
+        self._root.after(0, lambda: self._plan_panel.show_loading(False))
 
     # ------------------------------------------------------------------
     # Private — shared callbacks

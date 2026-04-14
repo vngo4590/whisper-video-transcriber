@@ -13,6 +13,7 @@ from tkinter import ttk
 
 from src.models import DEFAULT_MODEL, WHISPER_MODELS
 import src.ui.theme as T
+from src.ui.content_plan_tab import ContentPlanTab
 from src.ui.file_picker import FilePicker
 from src.ui.sidebar_widgets import card, divider, section_label
 from src.ui.transcribe_tab import TranscribeTab
@@ -21,7 +22,7 @@ from src.ui.video_clips_tab import VideoClipsTab
 
 class LeftPanel:
     """
-    Scrollable left sidebar with two mode tabs: Transcribe and Video Clips.
+    Scrollable left sidebar with three mode tabs: Transcribe, Video Clips, Content Plan.
 
     Shared state (selected file path, Whisper model) lives here and is
     injected into each tab. LeftPanel never touches Whisper or Claude
@@ -31,12 +32,13 @@ class LeftPanel:
         parent: tkinter container widget.
         on_transcribe: Forwarded verbatim to TranscribeTab.
         on_generate_clips: Forwarded verbatim to VideoClipsTab.
+        on_generate_plan: Forwarded verbatim to ContentPlanTab.
     """
 
-    def __init__(self, parent: tk.Widget, on_transcribe, on_generate_clips) -> None:
+    def __init__(self, parent: tk.Widget, on_transcribe, on_generate_clips, on_generate_plan) -> None:
         self._selected_path = tk.StringVar()
         self._model_var = tk.StringVar(value=DEFAULT_MODEL)
-        self._build(parent, on_transcribe, on_generate_clips)
+        self._build(parent, on_transcribe, on_generate_clips, on_generate_plan)
 
     # ------------------------------------------------------------------
     # Public API — called by App to reflect processing state
@@ -47,6 +49,7 @@ class LeftPanel:
         self._file_picker.set_busy(busy)
         self._transcribe_tab.set_busy(busy)
         self._clips_tab.set_busy(busy)
+        self._plan_tab.set_busy(busy)
         self._model_menu.config(state="disabled" if busy else "readonly")
 
     def show_loading(self, visible: bool) -> None:
@@ -62,7 +65,7 @@ class LeftPanel:
     # Private
     # ------------------------------------------------------------------
 
-    def _build(self, parent: tk.Widget, on_transcribe, on_generate_clips) -> None:
+    def _build(self, parent: tk.Widget, on_transcribe, on_generate_clips, on_generate_plan) -> None:
         # Fill the PanedWindow pane completely.
         container = tk.Frame(parent, bg=T.C_SIDEBAR)
         container.pack(fill="both", expand=True)
@@ -120,14 +123,19 @@ class LeftPanel:
 
         transcribe_frame = tk.Frame(mode_nb, bg=T.C_SIDEBAR)
         clips_frame      = tk.Frame(mode_nb, bg=T.C_SIDEBAR)
+        plan_frame       = tk.Frame(mode_nb, bg=T.C_SIDEBAR)
         mode_nb.add(transcribe_frame, text="  Transcribe  ")
         mode_nb.add(clips_frame,      text="  Video Clips  ")
+        mode_nb.add(plan_frame,       text="  Content Plan  ")
 
         self._transcribe_tab = TranscribeTab(
             transcribe_frame, self._selected_path, self._model_var, on_transcribe
         )
         self._clips_tab = VideoClipsTab(
             clips_frame, self._selected_path, self._model_var, on_generate_clips
+        )
+        self._plan_tab = ContentPlanTab(
+            plan_frame, self._selected_path, self._model_var, on_generate_plan
         )
 
         # Shared: progress bar + status label
