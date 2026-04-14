@@ -13,7 +13,7 @@ import os
 import tkinter as tk
 from tkinter import filedialog
 
-from src import media_utils
+from src.media import utils as media_utils
 from src.models import MEDIA_FILE_TYPES
 import src.ui.theme as T
 from src.ui.sidebar_widgets import card, hover, section_label

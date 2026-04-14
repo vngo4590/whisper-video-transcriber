@@ -1,5 +1,5 @@
 """
-moment_detector.py — Multi-strategy moment orchestrator.
+analysis/detector.py — Multi-strategy moment orchestrator.
 
 GRASP Controller: coordinates the three analysis strategies (audio energy,
                   visual motion, vision model) and merges their results into
@@ -13,9 +13,9 @@ sent to Claude, so each strategy can use its own marker syntax.
 """
 
 from src.models import AnalysisStrategy
-from src.audio_analyzer import build_energy_windows
-from src.visual_analyzer import build_motion_windows
-from src.vision_analyzer import build_vision_windows
+from src.analysis.audio import build_energy_windows
+from src.analysis.visual import build_motion_windows
+from src.analysis.vision import build_vision_windows
 
 
 def detect_moments(

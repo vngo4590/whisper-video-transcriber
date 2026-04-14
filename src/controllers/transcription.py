@@ -1,5 +1,5 @@
 """
-controller.py — Transcription workflow controller.
+controllers/transcription.py — Transcription workflow controller.
 
 GRASP Controller: handles the "Transcribe" system event from the UI.
                   Orchestrates TranscriptionService and FileHandler,
@@ -10,9 +10,9 @@ DIP: Depends on the public interfaces of TranscriptionService and
 
 import threading
 
-from src.file_handler import FileHandler
+from src.transcription.file_handler import FileHandler
 from src.models import ExportFormat
-from src.transcriber import TranscriptionService
+from src.transcription.service import TranscriptionService
 
 
 class TranscriptionController:

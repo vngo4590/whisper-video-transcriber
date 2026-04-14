@@ -1,5 +1,5 @@
 """
-file_handler.py — File I/O for transcription results.
+transcription/file_handler.py — File I/O for transcription results.
 
 SRP: Only responsible for persisting transcript text to disk.
      No knowledge of Whisper, UI, or media processing.

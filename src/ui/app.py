@@ -10,17 +10,17 @@ DIP: App depends on abstract callbacks/interfaces, not on concrete
 import tkinter as tk
 from tkinter import messagebox, ttk
 
-from src.clip_analyzer import ClipAnalyzer
-from src.clips_controller import ClipsController
-from src.controller import TranscriptionController
-from src.file_handler import FileHandler
+from src.clips.analyzer import ClipAnalyzer
+from src.controllers.clips import ClipsController
+from src.controllers.transcription import TranscriptionController
+from src.transcription.file_handler import FileHandler
 from src.models import ClipResult, WINDOW_SIZE, WINDOW_TITLE
-from src.transcriber import TranscriptionService
+from src.transcription.service import TranscriptionService
 from src.ui.clips_panel import ClipsPanel
 from src.ui.left_panel import LeftPanel
 from src.ui.right_panel import RightPanel
 from src.ui.theme import C_BG, C_BORDER, C_CARD, C_SIDEBAR, C_TEXT_2, SIDEBAR_W, apply_ttk_styles
-from src.video_cutter import VideoCutter
+from src.clips.cutter import VideoCutter
 
 
 class App:

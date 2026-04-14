@@ -1,5 +1,5 @@
 """
-word_refiner.py — Word-level post-processing for clip boundary quality.
+clips/word_refiner.py — Word-level post-processing for clip boundary quality.
 
 SRP: Pure functions that operate on Whisper word timestamps to:
      - Build a flat word index from Whisper segment data

@@ -1,5 +1,5 @@
 """
-audio_analyzer.py — Audio energy analysis for streamer highlight detection.
+analysis/audio.py — Audio energy analysis for streamer highlight detection.
 
 SRP: Only responsible for decoding audio from a video file and identifying
      high-energy windows (peaks) using RMS analysis.  No ffmpeg cutting, no UI,

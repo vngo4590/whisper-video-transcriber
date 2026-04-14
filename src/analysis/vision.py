@@ -1,5 +1,5 @@
 """
-vision_analyzer.py — Claude vision API keyframe scorer.
+analysis/vision.py — Claude vision API keyframe scorer.
 
 SRP: Extracts keyframes from a video, sends them to Claude's vision API in
      one batched call, and returns high-interest time windows.  No audio

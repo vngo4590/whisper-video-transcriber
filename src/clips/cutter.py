@@ -1,5 +1,5 @@
 """
-video_cutter.py — ffmpeg-based clip extraction with flexible aspect ratio support.
+clips/cutter.py — ffmpeg-based clip extraction with flexible aspect ratio support.
 
 SRP: Only responsible for cutting video segments and formatting the output.
      No LLM, no UI, no transcription.

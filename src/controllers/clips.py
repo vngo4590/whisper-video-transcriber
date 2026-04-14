@@ -1,5 +1,5 @@
 """
-clips_controller.py — Async orchestrator for the clip-generation pipeline.
+controllers/clips.py — Async orchestrator for the clip-generation pipeline.
 
 GRASP Controller: coordinates TranscriptionService → ClipAnalyzer → VideoCutter
                   on a background thread, delivering progress updates and results
@@ -12,12 +12,12 @@ from typing import Any, cast
 
 import whisper as _whisper_module
 
-from src.clip_analyzer import ClipAnalyzer
+from src.clips.analyzer import ClipAnalyzer
 from src.models import AnalysisStrategy, AspectRatio, ClipMode, ClipResult, ExportFormat, Segment
-from src.moment_detector import detect_moments
-from src.transcriber import TranscriptionService
-from src.video_cutter import VideoCutter
-from src.word_refiner import build_word_index, snap_to_word_boundary, refine_all_clips
+from src.analysis.detector import detect_moments
+from src.transcription.service import TranscriptionService
+from src.clips.cutter import VideoCutter
+from src.clips.word_refiner import build_word_index, snap_to_word_boundary, refine_all_clips
 
 
 def _get_video_duration(path: str) -> float:

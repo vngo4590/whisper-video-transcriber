@@ -1,5 +1,5 @@
 """
-transcriber.py — Whisper transcription service.
+transcription/service.py — Whisper transcription service.
 
 SRP: Only responsible for loading a Whisper model and producing transcript text.
 OCP: Subclass TranscriptionService to swap in a different backend without

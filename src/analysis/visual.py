@@ -1,5 +1,5 @@
 """
-visual_analyzer.py — Motion-burst detection via OpenCV frame differencing.
+analysis/visual.py — Motion-burst detection via OpenCV frame differencing.
 
 SRP: Only responsible for measuring inter-frame pixel change in a video and
      returning high-motion windows.  No audio, no LLM, no UI.

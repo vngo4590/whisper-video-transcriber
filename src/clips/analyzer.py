@@ -1,5 +1,5 @@
 """
-clip_analyzer.py — Claude API integration for viral moment detection.
+clips/analyzer.py — Claude API integration for viral moment detection.
 
 SRP: Only responsible for sending the transcript to Claude and returning
      a list of ClipResult objects. No ffmpeg, no UI, no file I/O.
@@ -24,7 +24,7 @@ from src.models import ClipMode, ClipResult, Segment, DEFAULT_CLAUDE_MODEL
 
 def _load_prompts() -> dict[str, str]:
     """Parse prompts/clip_prompts.md and return a dict keyed by ## heading."""
-    md_path = Path(__file__).parent.parent / "prompts" / "clip_prompts.md"
+    md_path = Path(__file__).parent.parent.parent / "prompts" / "clip_prompts.md"
     text = md_path.read_text(encoding="utf-8")
 
     sections: dict[str, str] = {}

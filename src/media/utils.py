@@ -1,5 +1,5 @@
 """
-media_utils.py — Video/image utilities.
+media/utils.py — Video/image utilities.
 
 SRP: Only responsible for media-specific operations (thumbnail extraction,
      file-type detection). No transcription or UI logic here.
