@@ -57,11 +57,13 @@ class OcrExtractor:
     def __init__(self) -> None:
         # Deferred so the heavy model load only happens when .extract() is called.
         self._reader = None
+        self._reader_languages: list[str] = []  # languages the current reader was built for
 
     def extract(
         self,
         video_path: str,
         sample_interval_s: float = 1.0,
+        languages: list[str] | None = None,
         on_log=None,
     ) -> list[OcrEntry]:
         """
@@ -76,6 +78,9 @@ class OcrExtractor:
         Args:
             video_path:        Absolute path to the source video file.
             sample_interval_s: Gap between sampled frames in seconds (default 1 s).
+            languages:         EasyOCR language codes to recognise, e.g. ``["en", "ja"]``.
+                               Defaults to ``["en"]``.  The reader is reinitialised
+                               automatically when the language list changes.
             on_log:            Optional ``(message, level)`` callback for progress.
 
         Returns:
@@ -85,6 +90,8 @@ class OcrExtractor:
         def _log(msg: str, level: str = "info") -> None:
             if on_log:
                 on_log(msg, level)
+
+        langs = languages or ["en"]
 
         import os
         filename = os.path.basename(video_path)
@@ -100,7 +107,7 @@ class OcrExtractor:
         frame_step   = max(1, int(round(fps * sample_interval_s)))
         total_samples = max(1, total_frames // frame_step)
 
-        _log(f"OCR: sampling {filename} every {sample_interval_s:.0f}s  ({total_samples} frames)", "detail")
+        _log(f"OCR: languages={langs}  sampling {filename} every {sample_interval_s:.0f}s  ({total_samples} frames)", "detail")
 
         # Collect (timestamp_seconds, ocr_text) for every sampled frame that
         # produced a non-empty OCR result.
@@ -122,7 +129,7 @@ class OcrExtractor:
                 pct = int(100 * sample_num / total_samples)
                 _log(f"  OCR frame {sample_num}/{total_samples}  ({pct}%)  @{timestamp:.1f}s", "detail")
 
-            text = self._extract_frame_text(frame)
+            text = self._extract_frame_text(frame, langs)
             if text:
                 raw.append((timestamp, text))
 
@@ -140,7 +147,7 @@ class OcrExtractor:
     # Private
     # ------------------------------------------------------------------
 
-    def _extract_frame_text(self, frame) -> str:
+    def _extract_frame_text(self, frame, langs: list[str]) -> str:
         """
         Run OCR on a single BGR frame and return the visible text as a string.
 
@@ -150,7 +157,7 @@ class OcrExtractor:
 
         Returns an empty string if no confident text is detected.
         """
-        reader = self._get_reader()
+        reader = self._get_reader(langs)
 
         # readtext returns: list of ([bbox_points], text, confidence_score)
         results = reader.readtext(frame, detail=1)
@@ -164,19 +171,20 @@ class OcrExtractor:
 
         return " | ".join(lines) if lines else ""
 
-    def _get_reader(self):
+    def _get_reader(self, langs: list[str]):
         """
-        Lazy-init the EasyOCR reader.
+        Lazy-init (or reinit) the EasyOCR reader for the given language list.
 
-        EasyOCR downloads a ~100 MB English model on the first run and caches it
-        in ~/.EasyOCR/.  Subsequent runs load from the local cache (~2 s startup).
+        EasyOCR downloads language model files (~50–150 MB each) on first use and
+        caches them in ~/.EasyOCR/.  The reader is reinitialised only when the
+        language list changes so repeated calls within one run pay no extra cost.
         gpu=False is safest for a desktop app; set to True for GPU-accelerated hosts.
         """
-        if self._reader is None:
-            # Deferred import: easyocr is only required when the feature is enabled.
-            # This prevents an ImportError crash if the user has not installed it.
+        # Reinitialise if languages changed or not yet initialised
+        if self._reader is None or sorted(langs) != sorted(self._reader_languages):
             import easyocr
-            self._reader = easyocr.Reader(["en"], gpu=False)
+            self._reader = easyocr.Reader(langs, gpu=False)
+            self._reader_languages = list(langs)
         return self._reader
 
 

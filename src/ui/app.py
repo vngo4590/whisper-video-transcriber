@@ -190,12 +190,13 @@ class App:
 
     def _on_transcribe_requested(
         self, path, model_name, export_format, do_translate, max_words_per_line,
-        extract_onscreen=False,
+        extract_onscreen=False, ocr_languages=None,
     ):
         self._start_job()
         self._transcription_controller.run(
             path, model_name, export_format, do_translate, max_words_per_line,
             extract_onscreen=extract_onscreen,
+            ocr_languages=ocr_languages,
             cancel_event=self._cancel_event,
         )
 

@@ -65,6 +65,7 @@ class TranscriptionController:
         do_translate: bool,
         max_words_per_line: int,
         extract_onscreen: bool = False,
+        ocr_languages: list[str] | None = None,
         cancel_event: threading.Event = None,
     ) -> None:
         """
@@ -79,6 +80,7 @@ class TranscriptionController:
             do_translate:      Translate to English.
             max_words_per_line: SRT word limit per block.
             extract_onscreen:  Run OCR and interleave on-screen text.
+            ocr_languages:     EasyOCR language codes (only used when extract_onscreen=True).
             cancel_event:      Set this event to request cancellation.
         """
         self._on_start()
@@ -86,7 +88,7 @@ class TranscriptionController:
             target=self._worker,
             args=(
                 path, model_name, export_format, do_translate,
-                max_words_per_line, extract_onscreen,
+                max_words_per_line, extract_onscreen, ocr_languages,
                 cancel_event or threading.Event(),
             ),
             daemon=True,
@@ -114,6 +116,7 @@ class TranscriptionController:
         do_translate: bool,
         max_words_per_line: int,
         extract_onscreen: bool,
+        ocr_languages: list[str] | None,
         cancel_event: threading.Event,
     ) -> None:
         try:
@@ -122,10 +125,13 @@ class TranscriptionController:
             # ── Stage 1: Transcribe with Whisper ──────────────────────
             self._log(f"Transcribing: {filename}", "stage")
             self._log(f"  model={model_name}  format={export_format.value}  translate={do_translate}", "detail")
+            if extract_onscreen and ocr_languages:
+                self._log(f"  OCR languages: {ocr_languages}", "detail")
 
             text = self._svc.transcribe(
                 path, model_name, export_format, do_translate, max_words_per_line,
                 extract_onscreen=extract_onscreen,
+                ocr_languages=ocr_languages,
                 on_log=self._on_log,
             )
 

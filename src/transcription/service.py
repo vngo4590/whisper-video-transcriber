@@ -39,6 +39,7 @@ class TranscriptionService:
         do_translate: bool,
         max_words_per_subtitle: int,
         extract_onscreen: bool = False,
+        ocr_languages: list[str] | None = None,
         on_log=None,
     ) -> str:
         """
@@ -57,6 +58,9 @@ class TranscriptionService:
             max_words_per_subtitle: SRT only — max words per subtitle block.
             extract_onscreen:      When True, also run OCR on video frames and
                                    interleave on-screen text into the output.
+            ocr_languages:         EasyOCR language codes, e.g. ``["en", "ja"]``.
+                                   Only used when *extract_onscreen* is True.
+                                   Defaults to ``["en"]``.
             on_log:                Optional ``(message, level)`` callback for
                                    detailed progress reporting.
 
@@ -87,7 +91,8 @@ class TranscriptionService:
 
         if extract_onscreen:
             return self._transcribe_with_onscreen(
-                path, result, export_format, max_words_per_subtitle, on_log
+                path, result, export_format, max_words_per_subtitle,
+                ocr_languages=ocr_languages, on_log=on_log,
             )
 
         # Standard speech-only path (unchanged behaviour)
@@ -105,6 +110,7 @@ class TranscriptionService:
         whisper_result: dict,
         export_format: ExportFormat,
         max_words_per_subtitle: int,
+        ocr_languages: list[str] | None = None,
         on_log=None,
     ) -> str:
         """
@@ -119,7 +125,7 @@ class TranscriptionService:
         from src.transcription.ocr_extractor import OcrExtractor
         from src.transcription.merger import TranscriptMerger
 
-        ocr_entries = OcrExtractor().extract(path, on_log=on_log)
+        ocr_entries = OcrExtractor().extract(path, languages=ocr_languages, on_log=on_log)
         merger      = TranscriptMerger()
 
         if export_format is ExportFormat.SRT:

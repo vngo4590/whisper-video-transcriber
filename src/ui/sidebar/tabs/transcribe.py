@@ -43,6 +43,7 @@ class TranscribeTab:
         self._max_words_var      = tk.IntVar(value=DEFAULT_MAX_WORDS_PER_LINE)
         self._translate_var      = tk.BooleanVar(value=False)
         self._onscreen_var       = tk.BooleanVar(value=False)
+        self._ocr_langs_var      = tk.StringVar(value="en")
 
         self._build(parent)
 
@@ -53,6 +54,7 @@ class TranscribeTab:
         self._max_words_spinbox.config(state=btn)
         self._translate_checkbox.config(state=btn)
         self._onscreen_checkbox.config(state=btn)
+        self._ocr_langs_entry.config(state=btn)
         self._confirm_button.config(
             state=btn,
             bg=T.C_ACCENT_D if busy else T.C_ACCENT,
@@ -109,8 +111,33 @@ class TranscribeTab:
             font=T.FONT_LABEL, bg=T.C_CARD, fg=T.C_TEXT_1,
             activebackground=T.C_CARD, activeforeground=T.C_TEXT_1,
             selectcolor=T.C_ACCENT, relief="flat", bd=0, cursor="hand2",
+            command=self._toggle_ocr_langs,
         )
         self._onscreen_checkbox.pack(anchor="w", pady=(4, 0))
+
+        # Language picker — shown only when OCR is enabled
+        self._ocr_langs_frame = tk.Frame(opt_card, bg=T.C_CARD)
+        # (not packed yet — _toggle_ocr_langs controls visibility)
+
+        tk.Label(
+            self._ocr_langs_frame, text="Languages (comma-separated)",
+            font=T.FONT_LABEL, bg=T.C_CARD, fg=T.C_TEXT_2,
+        ).pack(anchor="w", pady=(6, 1))
+
+        self._ocr_langs_entry = tk.Entry(
+            self._ocr_langs_frame, textvariable=self._ocr_langs_var,
+            font=T.FONT_LABEL, bg=T.C_CARD, fg=T.C_TEXT_1,
+            insertbackground=T.C_TEXT_1, relief="flat",
+            highlightthickness=1, highlightbackground=T.C_BORDER,
+            highlightcolor=T.C_ACCENT,
+        )
+        self._ocr_langs_entry.pack(fill="x", pady=(0, 2))
+
+        tk.Label(
+            self._ocr_langs_frame,
+            text="e.g.  en · zh · ja · ko · fr · de · es · ar · hi · ru",
+            font=("Segoe UI", 8), bg=T.C_CARD, fg=T.C_TEXT_2,
+        ).pack(anchor="w")
 
         # Transcribe button
         btn_frame = tk.Frame(parent, bg=T.C_SIDEBAR)
@@ -124,6 +151,19 @@ class TranscribeTab:
         self._confirm_button.pack(fill="x")
         hover(self._confirm_button, T.C_ACCENT, T.C_ACCENT_H)
 
+    def _toggle_ocr_langs(self) -> None:
+        """Show/hide the language picker based on the OCR checkbox state."""
+        if self._onscreen_var.get():
+            self._ocr_langs_frame.pack(fill="x", padx=(20, 0), pady=(0, 4))
+        else:
+            self._ocr_langs_frame.pack_forget()
+
+    def _parse_ocr_languages(self) -> list[str]:
+        """Parse the language entry (comma/space separated) into a list of codes."""
+        raw = self._ocr_langs_var.get()
+        codes = [c.strip() for c in raw.replace(",", " ").split() if c.strip()]
+        return codes if codes else ["en"]
+
     def _handle_submit(self) -> None:
         path = self._selected_path.get()
         if not path:
@@ -135,5 +175,6 @@ class TranscribeTab:
             ExportFormat(self._export_format_var.get()),
             self._translate_var.get(),
             self._max_words_var.get(),
-            self._onscreen_var.get(),   # whether to run OCR and extract on-screen text
+            self._onscreen_var.get(),
+            self._parse_ocr_languages(),  # OCR language list (only used when OCR is enabled)
         )
