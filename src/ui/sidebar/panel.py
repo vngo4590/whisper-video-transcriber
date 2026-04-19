@@ -14,6 +14,7 @@ from tkinter import ttk
 from src.config import settings
 from src.models import DEFAULT_MODEL, WHISPER_MODELS
 import src.ui.theme as T
+from src.ui.theme import SIDEBAR_W
 from src.ui.sidebar.file_picker import FilePicker
 from src.ui.sidebar.widgets import card, divider, section_label
 from src.ui.sidebar.tabs.transcribe import TranscribeTab
@@ -30,15 +31,24 @@ class LeftPanel:
     directly — all business logic flows through callbacks.
 
     Args:
-        parent: tkinter container widget.
-        on_transcribe: Forwarded verbatim to TranscribeTab.
+        parent:            tkinter container widget.
+        on_transcribe:     Forwarded verbatim to TranscribeTab.
         on_generate_clips: Forwarded verbatim to VideoClipsTab.
-        on_generate_plan: Forwarded verbatim to ContentPlanTab.
+        on_generate_plan:  Forwarded verbatim to ContentPlanTab.
+        on_cancel:         Called when the user clicks the Cancel button.
     """
 
-    def __init__(self, parent: tk.Widget, on_transcribe, on_generate_clips, on_generate_plan) -> None:
+    def __init__(
+        self,
+        parent: tk.Widget,
+        on_transcribe,
+        on_generate_clips,
+        on_generate_plan,
+        on_cancel=None,
+    ) -> None:
         self._selected_path = tk.StringVar()
         self._model_var = tk.StringVar(value=settings.get("whisper_model", DEFAULT_MODEL))
+        self._on_cancel = on_cancel
         self._build(parent, on_transcribe, on_generate_clips, on_generate_plan)
 
     # ------------------------------------------------------------------
@@ -54,13 +64,20 @@ class LeftPanel:
         self._model_menu.config(state="disabled" if busy else "readonly")
 
     def show_loading(self, visible: bool) -> None:
-        """Toggle the shared progress bar and status label."""
+        """Toggle the progress bar, status label, and Cancel button."""
         if visible:
             self._progress_bar.start(12)
             self._loading_label.config(text="Processing…  please wait", fg=T.C_WARN)
+            # Show the cancel button only while a job is running
+            self._cancel_button.pack(fill="x", pady=(6, 0))
         else:
             self._progress_bar.stop()
             self._loading_label.config(text="")
+            self._cancel_button.pack_forget()
+
+    def set_stage(self, text: str) -> None:
+        """Update the status label text with the current pipeline stage name."""
+        self._loading_label.config(text=text, fg=T.C_WARN)
 
     # ------------------------------------------------------------------
     # Private
@@ -140,17 +157,41 @@ class LeftPanel:
             plan_frame, self._selected_path, self._model_var, on_generate_plan
         )
 
-        # Shared: progress bar + status label
+        # Shared: progress bar + status label + cancel button
         prog_frame = tk.Frame(inner, bg=T.C_SIDEBAR)
         prog_frame.pack(fill="x", padx=T.PAD_H, pady=(10, 0))
+
         self._progress_bar = ttk.Progressbar(
             prog_frame, mode="indeterminate", style="Accent.Horizontal.TProgressbar"
         )
         self._progress_bar.pack(fill="x")
+
+        # Status label wraps long stage names rather than overflowing the sidebar
         self._loading_label = tk.Label(
-            prog_frame, text="", font=T.FONT_SMALL, bg=T.C_SIDEBAR, fg=T.C_WARN
+            prog_frame, text="", font=T.FONT_SMALL, bg=T.C_SIDEBAR, fg=T.C_WARN,
+            wraplength=SIDEBAR_W - T.PAD_H * 2,
+            justify="left",
         )
-        self._loading_label.pack(pady=(4, 0))
+        self._loading_label.pack(anchor="w", pady=(4, 0))
+
+        # Cancel button — starts hidden; shown only while a job is running.
+        # Pack geometry is managed by show_loading() so it appears/disappears
+        # without shifting other widgets.
+        self._cancel_button = tk.Button(
+            prog_frame,
+            text="Cancel",
+            command=self._handle_cancel,
+            font=T.FONT_LABEL,
+            bg=T.C_ERROR,
+            fg="#ffffff",
+            activebackground="#cc4444",
+            activeforeground="#ffffff",
+            relief="flat",
+            bd=0,
+            cursor="hand2",
+            pady=6,
+        )
+        # Do NOT pack here — show_loading(True) does that
 
         # Footer
         tk.Frame(inner, bg=T.C_BORDER, height=1).pack(fill="x", padx=T.PAD_H, pady=(20, 0))
@@ -158,3 +199,12 @@ class LeftPanel:
             inner, text="Powered by OpenAI Whisper",
             font=T.FONT_SMALL, bg=T.C_SIDEBAR, fg=T.C_TEXT_3
         ).pack(pady=(6, 16))
+
+    def _handle_cancel(self) -> None:
+        """Forward the cancel request to the App and give immediate visual feedback."""
+        # Update label immediately so the user sees "Cancelling…" before the
+        # background thread notices the event and calls on_done().
+        self._loading_label.config(text="Cancelling…", fg=T.C_WARN)
+        self._cancel_button.config(state="disabled")
+        if self._on_cancel:
+            self._on_cancel()

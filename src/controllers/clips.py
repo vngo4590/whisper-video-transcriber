@@ -7,12 +7,14 @@ GRASP Controller: coordinates TranscriptionService → ClipAnalyzer → VideoCut
 DIP: Depends on service interfaces, not on tkinter or ffmpeg directly.
 """
 
+import os
 import threading
 from typing import Any, cast
 
 import whisper as _whisper_module
 
 from src.clips.analyzer import ClipAnalyzer
+from src.controllers import OperationCancelledError
 from src.models import AnalysisStrategy, AspectRatio, ClipMode, ClipResult, ExportFormat, Segment
 from src.analysis.detector import detect_moments
 from src.transcription.service import TranscriptionService
@@ -53,6 +55,7 @@ class ClipsController:
         on_success,
         on_error,
         on_done,
+        on_log=None,
     ):
         self._svc      = transcription_service
         self._analyzer = clip_analyzer
@@ -63,6 +66,7 @@ class ClipsController:
         self._on_success   = on_success
         self._on_error     = on_error
         self._on_done      = on_done
+        self._on_log       = on_log
 
     def run(
         self,
@@ -78,6 +82,7 @@ class ClipsController:
         min_segment_duration:  float       = DEFAULT_MIN_SEGMENT_DURATION,
         prompt_override:       str         = "",
         analysis_strategies:   set         = None,
+        cancel_event:          threading.Event = None,
     ) -> None:
         """Start the pipeline in a daemon thread; returns immediately."""
         threading.Thread(
@@ -87,6 +92,7 @@ class ClipsController:
                 clip_mode, aspect_ratio, custom_instructions,
                 allow_cut_anywhere, min_segment_duration, prompt_override,
                 analysis_strategies or set(),
+                cancel_event or threading.Event(),
             ),
             daemon=True,
         ).start()
@@ -109,10 +115,24 @@ class ClipsController:
         min_segment_duration: float,
         prompt_override:      str,
         analysis_strategies:  set,
+        cancel_event:         threading.Event,
     ) -> None:
+        def _log(msg: str, level: str = "info") -> None:
+            if self._on_log:
+                self._on_log(msg, level)
+
+        def _check_cancel() -> None:
+            if cancel_event.is_set():
+                raise OperationCancelledError("Clip generation cancelled by user.")
+
         try:
+            filename = os.path.basename(path)
+
             # ── Stage 1: Transcribe ────────────────────────────────────
             self._on_stage("Transcribing video…")
+            _log(f"Transcribing: {filename}  model={model_name}", "stage")
+            _log(f"  word_timestamps=True  task=transcribe", "detail")
+
             model  = _whisper_module.load_model(model_name)
             result = cast(dict[str, Any], model.transcribe(path, verbose=False, word_timestamps=True))
             raw_segments = result.get("segments", [])
@@ -121,13 +141,15 @@ class ClipsController:
             word_index     = build_word_index(whisper_segs)
             video_duration = _get_video_duration(path)
 
+            _log(f"Whisper complete — {len(whisper_segs)} segment(s)  duration={video_duration:.1f}s", "detail")
+            _check_cancel()
+
             # ── Stage 1b: Moment analysis (strategy-driven) ───────────
             moments: list[dict] = []
             if analysis_strategies:
-                strategy_names = ", ".join(
-                    s.value.replace("_", " ") for s in analysis_strategies
-                )
+                strategy_names = ", ".join(s.value.replace("_", " ") for s in analysis_strategies)
                 self._on_stage(f"Analysing moments  ({strategy_names})…")
+                _log(f"Moment analysis: {strategy_names}", "stage")
                 moments = detect_moments(
                     video_path       = path,
                     whisper_segs     = whisper_segs,
@@ -136,11 +158,14 @@ class ClipsController:
                     api_key          = api_key,
                     claude_model     = claude_model,
                 )
+                _log(f"  {len(moments)} moment(s) detected", "detail")
+                _check_cancel()
 
             timestamped = self._build_timestamped_transcript(whisper_segs, moments)
 
             # ── Stage 2: Analyse with Claude ──────────────────────────
             self._on_stage("Analysing transcript with Claude…")
+            _log("Sending transcript to Claude for clip selection…", "stage")
             clips = self._analyzer.find_viral_moments(
                 transcript           = timestamped,
                 video_duration       = video_duration,
@@ -150,26 +175,30 @@ class ClipsController:
                 claude_model         = claude_model,
                 custom_instructions  = custom_instructions,
                 prompt_override      = prompt_override,
+                on_log               = self._on_log,
             )
+            _check_cancel()
 
             if not clips:
                 raise ValueError(
                     "Claude returned no clip suggestions. "
                     "Try a different model, mode, or a longer video."
                 )
+            _log(f"Claude selected {len(clips)} clip(s)", "detail")
 
             # ── Stage 2b: Snap to speech-segment or word boundaries ───
             if not allow_cut_anywhere:
                 self._on_stage("Aligning cuts to speech boundaries…")
+                _log("Snapping cut points to speech segment boundaries…", "stage")
                 clips = self._snap_boundaries(clips, seg_boundaries, video_duration)
             elif word_index:
-                # Free-cut mode: still snap to word edges — never mid-phoneme
                 self._on_stage("Snapping cuts to word boundaries…")
+                _log("Snapping cut points to word boundaries (free-cut mode)…", "stage")
                 clips = snap_to_word_boundary(clips, word_index, video_duration)
+            _check_cancel()
 
             # ── Stage 2c: Drop segments too short to be coherent ──────
             clips = self._filter_short_segments(clips, min_segment_duration)
-
             if not clips:
                 raise ValueError(
                     "All clip segments were too short after boundary alignment. "
@@ -177,11 +206,12 @@ class ClipsController:
                 )
 
             # ── Stage 2d: Word-level refinement ───────────────────────
-            # Trim leading/trailing filler words and remove stutter runs.
-            # Skipped gracefully when Whisper returned no word timestamps.
             if word_index:
                 self._on_stage("Removing fillers and stutters…")
+                _log("Word-level refinement: removing fillers and stutter runs…", "stage")
                 clips = refine_all_clips(clips, word_index, min_segment_duration)
+                _log(f"  {len(clips)} clip(s) remain after refinement", "detail")
+                _check_cancel()
 
             if not clips:
                 raise ValueError(
@@ -191,9 +221,12 @@ class ClipsController:
 
             # ── Stage 3: Cut each clip ────────────────────────────────
             for i, clip in enumerate(clips, start=1):
-                n_segs = len(clip.segments)
+                _check_cancel()
+                n_segs    = len(clip.segments)
                 seg_label = "1 segment" if n_segs == 1 else f"{n_segs} segments"
                 self._on_stage(f"Cutting clip {i}/{len(clips)}  ({seg_label}):  {clip.title}")
+                _log(f"Cutting clip {i}/{len(clips)}: {clip.title}", "stage")
+                _log(f"  {seg_label}  {clip.timestamp_label}  ratio={aspect_ratio.value}", "detail")
 
                 clip.output_path = self._cutter.cut_clip(
                     source_path  = path,
@@ -202,11 +235,17 @@ class ClipsController:
                     title        = clip.title,
                     aspect_ratio = aspect_ratio,
                 )
+                _log(f"  → {clip.output_path}", "detail")
                 self._on_clip_done(clip)
 
+            _log(f"All {len(clips)} clip(s) exported successfully.", "success")
             self._on_success(clips)
 
+        except OperationCancelledError:
+            _log("Clip generation cancelled.", "warn")
+            self._on_error("Operation was cancelled.")
         except Exception as exc:
+            _log(f"Error: {exc}", "error")
             self._on_error(str(exc))
         finally:
             self._on_done()

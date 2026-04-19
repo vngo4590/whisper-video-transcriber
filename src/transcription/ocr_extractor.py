@@ -62,6 +62,7 @@ class OcrExtractor:
         self,
         video_path: str,
         sample_interval_s: float = 1.0,
+        on_log=None,
     ) -> list[OcrEntry]:
         """
         Sample *video_path* once every *sample_interval_s* seconds and return
@@ -75,11 +76,19 @@ class OcrExtractor:
         Args:
             video_path:        Absolute path to the source video file.
             sample_interval_s: Gap between sampled frames in seconds (default 1 s).
+            on_log:            Optional ``(message, level)`` callback for progress.
 
         Returns:
             Chronologically sorted list of OcrEntry objects.
             Returns an empty list if the video cannot be opened or contains no text.
         """
+        def _log(msg: str, level: str = "info") -> None:
+            if on_log:
+                on_log(msg, level)
+
+        import os
+        filename = os.path.basename(video_path)
+
         cap = cv2.VideoCapture(video_path)
         if not cap.isOpened():
             raise IOError(f"OcrExtractor: cannot open video: {video_path}")
@@ -88,13 +97,16 @@ class OcrExtractor:
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
         # How many native frames to skip between samples.
-        # e.g. 30 fps video with 1 s interval → jump every 30 frames.
-        frame_step = max(1, int(round(fps * sample_interval_s)))
+        frame_step   = max(1, int(round(fps * sample_interval_s)))
+        total_samples = max(1, total_frames // frame_step)
+
+        _log(f"OCR: sampling {filename} every {sample_interval_s:.0f}s  ({total_samples} frames)", "detail")
 
         # Collect (timestamp_seconds, ocr_text) for every sampled frame that
         # produced a non-empty OCR result.
         raw: list[tuple[float, str]] = []
         frame_idx = 0
+        sample_num = 0
 
         while frame_idx < total_frames:
             cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
@@ -102,7 +114,14 @@ class OcrExtractor:
             if not ret:
                 break
 
-            timestamp = frame_idx / fps
+            timestamp  = frame_idx / fps
+            sample_num += 1
+
+            # Log progress every 10% so the activity log isn't flooded
+            if sample_num == 1 or sample_num % max(1, total_samples // 10) == 0:
+                pct = int(100 * sample_num / total_samples)
+                _log(f"  OCR frame {sample_num}/{total_samples}  ({pct}%)  @{timestamp:.1f}s", "detail")
+
             text = self._extract_frame_text(frame)
             if text:
                 raw.append((timestamp, text))
@@ -111,8 +130,11 @@ class OcrExtractor:
 
         cap.release()
 
+        entries = _merge_consecutive(raw, sample_interval_s)
+        _log(f"OCR complete — {len(entries)} on-screen text span(s) found", "detail")
+
         # Merge frames that show the same text into single time-span entries.
-        return _merge_consecutive(raw, sample_interval_s)
+        return entries
 
     # ------------------------------------------------------------------
     # Private

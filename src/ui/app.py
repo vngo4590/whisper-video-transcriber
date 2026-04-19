@@ -7,6 +7,7 @@ DIP: App depends on abstract callbacks/interfaces, not on concrete
      widget internals from either panel.
 """
 
+import threading
 import tkinter as tk
 from tkinter import messagebox, ttk
 
@@ -17,6 +18,7 @@ from src.controllers.transcription import TranscriptionController
 from src.transcription.file_handler import FileHandler
 from src.models import ClipResult, WINDOW_SIZE, WINDOW_TITLE
 from src.transcription.service import TranscriptionService
+from src.ui.panels.activity_log import ActivityLogPanel
 from src.ui.panels.clips import ClipsPanel
 from src.ui.panels.content_plan import ContentPlanPanel
 from src.ui.panels.transcript import RightPanel
@@ -29,9 +31,15 @@ class App:
     """
     Bootstraps the application window, panels, and services.
 
-    The right side uses a ttk.Notebook with two tabs:
-      • Transcript — existing transcription output
-      • Clips      — AI-generated viral clip cards
+    The right side uses a ttk.Notebook with four tabs:
+      • Transcript    — transcription output
+      • Clips         — AI-generated viral clip cards
+      • Content Plan  — AI content plan
+      • Activity      — live operation log (auto-selected when a job starts)
+
+    A single threading.Event (_cancel_event) is shared across all controllers.
+    Clicking Cancel sets it; the active worker checks it between stages.
+    The event is cleared before each new run so it can be reused.
     """
 
     def __init__(self):
@@ -45,6 +53,9 @@ class App:
         apply_ttk_styles(self._root)
         self._configure_notebook_style()
 
+        # Shared cancellation token — reset before every new run
+        self._cancel_event = threading.Event()
+
         self._transcription_controller = TranscriptionController(
             transcription_service=TranscriptionService(),
             file_handler=FileHandler(),
@@ -52,6 +63,7 @@ class App:
             on_success=self._on_transcribe_success,
             on_error=self._on_error,
             on_done=self._on_done,
+            on_log=self._on_log,
         )
 
         self._clips_controller = ClipsController(
@@ -63,6 +75,7 @@ class App:
             on_success=self._on_clips_success,
             on_error=self._on_error,
             on_done=self._on_done,
+            on_log=self._on_log,
         )
 
         self._plan_controller = ContentPlanController(
@@ -70,6 +83,7 @@ class App:
             on_success=self._on_plan_success,
             on_error=self._on_error,
             on_done=self._on_done,
+            on_log=self._on_log,
         )
 
         self._build_layout()
@@ -83,12 +97,10 @@ class App:
     # ------------------------------------------------------------------
 
     def _build_layout(self) -> None:
-        # PanedWindow gives a draggable sash between the sidebar and the
-        # content area so the user can resize both panels freely.
         paned = tk.PanedWindow(
             self._root,
             orient="horizontal",
-            bg=C_BORDER,       # sash colour matches theme border
+            bg=C_BORDER,
             sashwidth=5,
             sashpad=0,
             sashrelief="flat",
@@ -100,8 +112,6 @@ class App:
         left_frame  = tk.Frame(paned, bg=C_SIDEBAR)
         right_frame = tk.Frame(paned, bg=C_BG)
 
-        # Left pane: fixed initial width; never steals space on window resize.
-        # Right pane: stretches to absorb any extra space on resize / maximise.
         paned.add(left_frame,  minsize=180, width=SIDEBAR_W, stretch="never")
         paned.add(right_frame, minsize=300,                  stretch="always")
 
@@ -110,6 +120,7 @@ class App:
             on_transcribe=self._on_transcribe_requested,
             on_generate_clips=self._on_generate_clips_requested,
             on_generate_plan=self._on_generate_plan_requested,
+            on_cancel=self._on_cancel_requested,
         )
 
         # Right side: tabbed notebook
@@ -119,14 +130,18 @@ class App:
         transcript_tab = tk.Frame(self._notebook, bg=C_BG)
         clips_tab      = tk.Frame(self._notebook, bg=C_BG)
         plan_tab       = tk.Frame(self._notebook, bg=C_BG)
+        activity_tab   = tk.Frame(self._notebook, bg=C_BG)
 
         self._notebook.add(transcript_tab, text="  Transcript  ")
         self._notebook.add(clips_tab,      text="  Clips  ")
         self._notebook.add(plan_tab,       text="  Content Plan  ")
+        self._notebook.add(activity_tab,   text="  Activity  ")
 
-        self._right       = RightPanel(transcript_tab)
-        self._clips       = ClipsPanel(clips_tab)
-        self._plan_panel  = ContentPlanPanel(plan_tab)
+        self._right      = RightPanel(transcript_tab)
+        self._clips      = ClipsPanel(clips_tab)
+        self._plan_panel = ContentPlanPanel(plan_tab)
+        # ActivityLogPanel needs root for after()-based thread-marshalling
+        self._activity   = ActivityLogPanel(activity_tab, self._root)
 
     # ------------------------------------------------------------------
     # Private — ttk notebook dark style
@@ -155,13 +170,33 @@ class App:
         )
 
     # ------------------------------------------------------------------
+    # Private — shared job helpers
+    # ------------------------------------------------------------------
+
+    def _start_job(self) -> None:
+        """Clear the cancel event and prepare the activity log for a new run."""
+        self._cancel_event.clear()
+        self._activity.clear()
+        # Auto-switch to the Activity tab so the user sees live progress
+        self._root.after(0, lambda: self._notebook.select(3))
+
+    def _on_cancel_requested(self) -> None:
+        """Set the shared cancel event so the active worker exits after its current stage."""
+        self._cancel_event.set()
+
+    # ------------------------------------------------------------------
     # Private — transcription callbacks
     # ------------------------------------------------------------------
 
-    def _on_transcribe_requested(self, path, model_name, export_format, do_translate, max_words_per_line, extract_onscreen=False):
+    def _on_transcribe_requested(
+        self, path, model_name, export_format, do_translate, max_words_per_line,
+        extract_onscreen=False,
+    ):
+        self._start_job()
         self._transcription_controller.run(
             path, model_name, export_format, do_translate, max_words_per_line,
             extract_onscreen=extract_onscreen,
+            cancel_event=self._cancel_event,
         )
 
     def _on_transcribe_start(self):
@@ -185,17 +220,19 @@ class App:
         allow_cut_anywhere, min_segment_duration, prompt_override,
         analysis_strategies,
     ):
+        self._start_job()
         self._clips.reset()
-        self._notebook.select(1)
         self._clips_controller.run(
             path, model_name, max_clips, api_key, claude_model,
             clip_mode, aspect_ratio, custom_instructions,
             allow_cut_anywhere, min_segment_duration, prompt_override,
             analysis_strategies,
+            cancel_event=self._cancel_event,
         )
 
     def _on_clips_stage(self, text: str):
         # Callbacks arrive from a background thread — use after() to be thread-safe
+        self._root.after(0, lambda: self._left.set_stage(text))
         self._root.after(0, lambda: self._clips.set_stage(text))
         self._root.after(0, lambda: self._clips.show_loading(True))
 
@@ -204,6 +241,7 @@ class App:
 
     def _on_clips_success(self, clips: list[ClipResult]):
         self._root.after(0, lambda: self._clips.show_loading(False))
+        self._root.after(0, lambda: self._notebook.select(1))
 
     # ------------------------------------------------------------------
     # Private — content plan callbacks
@@ -213,27 +251,38 @@ class App:
         self, path, model_name, api_key, claude_model,
         focus, max_highlights, context, analysis_strategies,
     ):
+        self._start_job()
         self._plan_panel.reset()
-        self._notebook.select(2)
         self._plan_controller.run(
             path, model_name, api_key, claude_model,
             focus, max_highlights, context, analysis_strategies,
+            cancel_event=self._cancel_event,
         )
 
     def _on_plan_stage(self, text: str):
+        self._root.after(0, lambda: self._left.set_stage(text))
         self._root.after(0, lambda: self._plan_panel.set_stage(text))
         self._root.after(0, lambda: self._plan_panel.show_loading(True))
 
     def _on_plan_success(self, plan_text: str):
         self._root.after(0, lambda: self._plan_panel.set_text(plan_text))
         self._root.after(0, lambda: self._plan_panel.show_loading(False))
+        self._root.after(0, lambda: self._notebook.select(2))
 
     # ------------------------------------------------------------------
     # Private — shared callbacks
     # ------------------------------------------------------------------
 
+    def _on_log(self, message: str, level: str = "info") -> None:
+        """Route a log entry to the ActivityLogPanel (thread-safe via append())."""
+        self._activity.append(message, level)
+
     def _on_error(self, message: str):
-        self._root.after(0, lambda: messagebox.showerror("Error", f"An error occurred:\n{message}"))
+        if message == "Operation was cancelled.":
+            # Cancellation is not an unexpected error — log it and move on
+            self._root.after(0, lambda: self._activity.append("Operation cancelled by user.", "warn"))
+        else:
+            self._root.after(0, lambda: messagebox.showerror("Error", f"An error occurred:\n{message}"))
 
     def _on_done(self):
         self._root.after(0, lambda: self._left.show_loading(False))

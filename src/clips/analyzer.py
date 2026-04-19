@@ -86,6 +86,7 @@ class ClipAnalyzer:
         claude_model: str = DEFAULT_CLAUDE_MODEL.model_id,
         custom_instructions: str = "",
         prompt_override: str = "",
+        on_log=None,
     ) -> list[ClipResult]:
         """
         Send the transcript to Claude and return validated ClipResult objects.
@@ -106,6 +107,10 @@ class ClipAnalyzer:
         Returns:
             List of ClipResult objects sorted by first segment start time.
         """
+        def _log(msg: str, level: str = "info") -> None:
+            if on_log:
+                on_log(msg, level)
+
         client = anthropic.Anthropic(api_key=api_key)
 
         if prompt_override.strip():
@@ -129,6 +134,9 @@ class ClipAnalyzer:
                 "\n\nApply these on top of all rules above. They take priority where they conflict."
             )
 
+        _log(f"→ Claude API  model={claude_model}  max_tokens=4096", "api")
+        _log(f"  mode={clip_mode.value}  max_clips={max_clips}  input={len(user_message):,} chars", "detail")
+
         response = client.messages.create(
             model=claude_model,
             max_tokens=4096,
@@ -137,6 +145,7 @@ class ClipAnalyzer:
         )
 
         raw = self._extract_text_response(response.content)
+        _log(f"← Claude responded  ({len(raw):,} chars)", "detail")
         if not raw:
             raise ValueError("Claude returned no text content.")
         data = self._parse_json(raw)

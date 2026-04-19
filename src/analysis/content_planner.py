@@ -77,6 +77,7 @@ def generate_plan(
     focus: str = "All highlights",
     max_highlights: int = 5,
     context: str = "",
+    on_log=None,
 ) -> str:
     """
     Send *transcript* to Claude and return a formatted content plan string.
@@ -92,6 +93,10 @@ def generate_plan(
     Returns:
         Human-readable, copy-ready content plan as a plain-text string.
     """
+    def _log(msg: str, level: str = "info") -> None:
+        if on_log:
+            on_log(msg, level)
+
     client = anthropic.Anthropic(api_key=api_key)
 
     context_block = ""
@@ -104,6 +109,9 @@ def generate_plan(
         context_block=context_block,
         transcript=transcript,
     )
+
+    _log(f"→ Claude API  model={claude_model}  max_tokens=4096", "api")
+    _log(f"  focus={focus!r}  max_highlights={max_highlights}  input={len(user_message):,} chars", "detail")
 
     response = client.messages.create(
         model=claude_model,
@@ -121,6 +129,8 @@ def generate_plan(
 
     if not raw:
         raise ValueError("Claude returned no content.")
+
+    _log(f"← Claude responded  ({len(raw):,} chars)", "detail")
 
     cleaned = re.sub(r"```(?:json)?|```", "", raw).strip()
     try:

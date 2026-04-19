@@ -39,6 +39,7 @@ class TranscriptionService:
         do_translate: bool,
         max_words_per_subtitle: int,
         extract_onscreen: bool = False,
+        on_log=None,
     ) -> str:
         """
         Return the full transcript for *path* in the requested format.
@@ -56,22 +57,37 @@ class TranscriptionService:
             max_words_per_subtitle: SRT only — max words per subtitle block.
             extract_onscreen:      When True, also run OCR on video frames and
                                    interleave on-screen text into the output.
+            on_log:                Optional ``(message, level)`` callback for
+                                   detailed progress reporting.
 
         Returns:
             Transcript string in the chosen format.
         """
-        model  = whisper.load_model(model_name)
-        task   = "translate" if do_translate else "transcribe"
+        def _log(msg: str, level: str = "info") -> None:
+            if on_log:
+                on_log(msg, level)
+
+        import os
+        filename = os.path.basename(path)
+        task = "translate" if do_translate else "transcribe"
+
+        _log(f"Loading Whisper model: {model_name}", "detail")
+        model = whisper.load_model(model_name)
+
+        _log(f"Starting {'translation' if do_translate else 'transcription'}: {filename}", "detail")
+        _log(f"  word_timestamps=True  task={task}", "detail")
         result = model.transcribe(
             path,
             verbose=False,
             task=task,
             word_timestamps=True,   # enables DTW-aligned per-word timing for SRT splits
         )
+        seg_count = len(result.get("segments", []))
+        _log(f"Whisper complete — {seg_count} segment(s) detected", "detail")
 
         if extract_onscreen:
             return self._transcribe_with_onscreen(
-                path, result, export_format, max_words_per_subtitle
+                path, result, export_format, max_words_per_subtitle, on_log
             )
 
         # Standard speech-only path (unchanged behaviour)
@@ -89,6 +105,7 @@ class TranscriptionService:
         whisper_result: dict,
         export_format: ExportFormat,
         max_words_per_subtitle: int,
+        on_log=None,
     ) -> str:
         """
         Run OCR on the video, then merge speech and on-screen text.
@@ -102,7 +119,7 @@ class TranscriptionService:
         from src.transcription.ocr_extractor import OcrExtractor
         from src.transcription.merger import TranscriptMerger
 
-        ocr_entries = OcrExtractor().extract(path)
+        ocr_entries = OcrExtractor().extract(path, on_log=on_log)
         merger      = TranscriptMerger()
 
         if export_format is ExportFormat.SRT:
