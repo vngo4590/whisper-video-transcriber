@@ -6,3 +6,5 @@ anthropic
 numpy
 easyocr
 tkinterdnd2
+# Optional — speaker diarization (requires HF token for pyannote/speaker-diarization-3.1)
+# pip install pyannote.audio

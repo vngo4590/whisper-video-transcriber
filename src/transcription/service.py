@@ -2,33 +2,38 @@
 transcription/service.py — Whisper transcription service.
 
 SRP:  Loads a Whisper model, transcribes the media file, and returns the result
-      as a formatted string.  When on-screen text extraction is enabled it also
-      coordinates OcrExtractor and TranscriptMerger — but delegates all OCR and
-      formatting work to those classes.
+      as a formatted string.  Optionally coordinates OcrExtractor/TranscriptMerger
+      (on-screen text) and SpeakerDiarizer (speaker labels) — but delegates all
+      such work to those classes.
 
 OCP:  Subclass TranscriptionService to swap in a different speech backend
       (e.g. faster-whisper, cloud ASR) without touching the controller or UI.
 
 DIP:  The controller depends on this class's public interface, not on Whisper
-      internals, EasyOCR, or SRT-building details.
+      internals, EasyOCR, pyannote, or SRT-building details.
 """
 
 import whisper
 
 from src.models import ExportFormat
-from src.transcription._srt_utils import format_srt_timestamp, split_segment
+from src.transcription._srt_utils import (
+    format_plain_timestamp,
+    format_srt_timestamp,
+    split_segment,
+)
 
 
 class TranscriptionService:
     """
     Loads a Whisper model and transcribes audio/video files.
 
-    Supports two output modes:
+    Supports three output modes:
 
-    * Speech-only  — standard Whisper transcription, SRT or plain text.
+    * Speech-only         — standard Whisper transcription, SRT or plain text.
     * With on-screen text — speech interleaved with OCR-extracted on-screen
-      text; each entry is labelled [SPEECH] or [ON-SCREEN] so the source is
-      always clear.
+                            text; each entry is labelled [SPEECH] or [ON-SCREEN].
+    * With speaker labels — speaker diarization labels prepended to each block
+                            (e.g. ``[Speaker A]``); can be combined with OCR.
     """
 
     def transcribe(
@@ -40,15 +45,13 @@ class TranscriptionService:
         max_words_per_subtitle: int,
         extract_onscreen: bool = False,
         ocr_languages: list[str] | None = None,
+        diarize: bool = False,
+        hf_token: str = "",
+        on_diarize_stage=None,
         on_log=None,
     ) -> str:
         """
         Return the full transcript for *path* in the requested format.
-
-        When *extract_onscreen* is True the method also samples the video with
-        OcrExtractor and merges the results with the speech transcript via
-        TranscriptMerger.  Both speech entries and on-screen entries are labelled
-        so the caller can always tell which type produced each line.
 
         Args:
             path:                  Absolute path to the media file.
@@ -56,13 +59,13 @@ class TranscriptionService:
             export_format:         SRT or PLAIN_TEXT output.
             do_translate:          Translate to English instead of transcribing.
             max_words_per_subtitle: SRT only — max words per subtitle block.
-            extract_onscreen:      When True, also run OCR on video frames and
-                                   interleave on-screen text into the output.
+            extract_onscreen:      Run OCR on video frames and interleave results.
             ocr_languages:         EasyOCR language codes, e.g. ``["en", "ja"]``.
-                                   Only used when *extract_onscreen* is True.
-                                   Defaults to ``["en"]``.
-            on_log:                Optional ``(message, level)`` callback for
-                                   detailed progress reporting.
+            diarize:               Run speaker diarization and label each segment.
+            hf_token:              Hugging Face access token (required when diarize=True).
+            on_diarize_stage:      Zero-arg callback fired just before diarization
+                                   starts — lets the controller update the sidebar label.
+            on_log:                Optional ``(message, level)`` callback.
 
         Returns:
             Transcript string in the chosen format.
@@ -84,21 +87,30 @@ class TranscriptionService:
             path,
             verbose=False,
             task=task,
-            word_timestamps=True,   # enables DTW-aligned per-word timing for SRT splits
+            word_timestamps=True,
         )
         seg_count = len(result.get("segments", []))
         _log(f"Whisper complete — {seg_count} segment(s) detected", "detail")
 
+        # ── Optional: speaker diarization ────────────────────────────────────
+        if diarize and hf_token:
+            if on_diarize_stage:
+                on_diarize_stage()
+            from src.transcription.diarizer import SpeakerDiarizer, assign_speakers
+            diarization = SpeakerDiarizer().diarize(path, hf_token, on_log=on_log)
+            assign_speakers(result["segments"], diarization)
+
+        # ── Optional: on-screen text extraction ──────────────────────────────
         if extract_onscreen:
             return self._transcribe_with_onscreen(
                 path, result, export_format, max_words_per_subtitle,
                 ocr_languages=ocr_languages, on_log=on_log,
             )
 
-        # Standard speech-only path (unchanged behaviour)
+        # ── Standard formatting ───────────────────────────────────────────────
         if export_format is ExportFormat.SRT:
             return self._build_srt(result["segments"], max_words_per_subtitle)
-        return str(result["text"])
+        return self._build_plain(result["segments"])
 
     # ------------------------------------------------------------------
     # Private — on-screen extraction path
@@ -113,15 +125,6 @@ class TranscriptionService:
         ocr_languages: list[str] | None = None,
         on_log=None,
     ) -> str:
-        """
-        Run OCR on the video, then merge speech and on-screen text.
-
-        Importing OcrExtractor and TranscriptMerger here (not at module level)
-        so that easyocr is only imported when the feature is actually used.
-        Users who never enable on-screen extraction are not burdened by the
-        easyocr import or its model-loading overhead.
-        """
-        # Deferred imports keep the module importable even without easyocr installed
         from src.transcription.ocr_extractor import OcrExtractor
         from src.transcription.merger import TranscriptMerger
 
@@ -135,28 +138,49 @@ class TranscriptionService:
         return merger.merge_to_plain(whisper_result["segments"], ocr_entries)
 
     # ------------------------------------------------------------------
-    # Private — speech-only SRT builder
+    # Private — formatting helpers
     # ------------------------------------------------------------------
 
-    def _build_srt(self, segments, max_words_per_subtitle: int) -> str:
+    def _build_srt(self, segments: list[dict], max_words_per_subtitle: int) -> str:
         """
-        Produce a valid SRT file body from Whisper segments (no OCR).
+        Produce a valid SRT body from Whisper segments.
 
-        Each segment is split into blocks of at most *max_words_per_subtitle*
-        words using DTW word-level timestamps for accurate per-block timing.
-
-        Format per block:
-            <index>
-            HH:MM:SS,mmm --> HH:MM:SS,mmm
-            <text>
-            <blank line>
+        When segments carry a ``"speaker"`` key (from diarization), each block
+        is prefixed with ``[Speaker A]`` etc.
         """
+        from src.transcription.diarizer import label_to_display
         blocks = []
         index  = 1
         for seg in segments:
+            speaker = seg.get("speaker", "")
+            prefix  = f"[{label_to_display(speaker)}] " if speaker else ""
             for start, end, text in split_segment(seg, max_words_per_subtitle):
                 t_start = format_srt_timestamp(start)
                 t_end   = format_srt_timestamp(end)
-                blocks.append(f"{index}\n{t_start} --> {t_end}\n{text}\n")
+                blocks.append(f"{index}\n{t_start} --> {t_end}\n{prefix}{text}\n")
                 index += 1
         return "\n".join(blocks)
+
+    def _build_plain(self, segments: list[dict]) -> str:
+        """
+        Produce plain text from Whisper segments.
+
+        Without diarization: returns concatenated segment text (matching the
+        original ``str(result['text'])`` behaviour).
+        With diarization: each segment line is prefixed ``[Speaker A @ HH:MM:SS]:``.
+        """
+        from src.transcription.diarizer import label_to_display
+        has_speakers = any(seg.get("speaker") for seg in segments)
+        if not has_speakers:
+            return " ".join(seg["text"].strip() for seg in segments if seg["text"].strip())
+
+        lines = []
+        for seg in segments:
+            text = seg["text"].strip()
+            if not text:
+                continue
+            speaker = seg.get("speaker", "")
+            ts      = format_plain_timestamp(seg["start"])
+            label   = label_to_display(speaker) if speaker else "Speaker"
+            lines.append(f"[{label} @ {ts}]: {text}")
+        return "\n".join(lines)

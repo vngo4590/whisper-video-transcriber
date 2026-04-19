@@ -79,9 +79,13 @@ class TranscriptMerger:
         items: list[tuple[float, float, str, str]] = []
 
         # Add speech entries, split by word limit
+        # When diarization ran, segments carry a "speaker" key; use it as the label.
+        from src.transcription.diarizer import label_to_display
         for seg in speech_segments:
+            speaker = seg.get("speaker", "")
+            label   = f"[{label_to_display(speaker)}]" if speaker else self.SPEECH_LABEL
             for start, end, text in split_segment(seg, max_words_per_subtitle):
-                items.append((start, end, self.SPEECH_LABEL, text))
+                items.append((start, end, label, text))
 
         # Add on-screen entries as-is (already one text block per span)
         for entry in ocr_entries:
@@ -124,8 +128,11 @@ class TranscriptMerger:
         items: list[tuple[float, str, str]] = []
 
         # One entry per Whisper segment (we don't sub-split in plain-text mode)
+        from src.transcription.diarizer import label_to_display
         for seg in speech_segments:
-            items.append((seg["start"], self.SPEECH_LABEL, seg["text"].strip()))
+            speaker = seg.get("speaker", "")
+            label   = f"[{label_to_display(speaker)}]" if speaker else self.SPEECH_LABEL
+            items.append((seg["start"], label, seg["text"].strip()))
 
         for entry in ocr_entries:
             items.append((entry.start, self.ON_SCREEN_LABEL, entry.text))

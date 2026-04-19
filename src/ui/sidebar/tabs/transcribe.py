@@ -12,8 +12,11 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from src.models import DEFAULT_EXPORT_FORMAT, DEFAULT_MAX_WORDS_PER_LINE, ExportFormat
+from src.transcription.diarizer import is_available as _diarization_available
 import src.ui.theme as T
 from src.ui.sidebar.widgets import card, hover, radiobutton, section_label
+
+_DIARIZATION_AVAILABLE = _diarization_available()
 
 
 class TranscribeTab:
@@ -25,7 +28,8 @@ class TranscribeTab:
         selected_path: Shared StringVar holding the chosen file path.
         model_var: Shared StringVar holding the chosen Whisper model name.
         on_transcribe: Callback — ``on_transcribe(path, model_name,
-                       export_format, do_translate, max_words_per_line)``.
+                       export_format, do_translate, max_words_per_line,
+                       extract_onscreen, ocr_languages, diarize, hf_token)``.
     """
 
     def __init__(
@@ -44,6 +48,8 @@ class TranscribeTab:
         self._translate_var      = tk.BooleanVar(value=False)
         self._onscreen_var       = tk.BooleanVar(value=False)
         self._ocr_langs_var      = tk.StringVar(value="en")
+        self._diarize_var        = tk.BooleanVar(value=False)
+        self._hf_token_var       = tk.StringVar(value="")
 
         self._build(parent)
 
@@ -58,6 +64,9 @@ class TranscribeTab:
         self._translate_checkbox.config(state=btn)
         self._onscreen_checkbox.config(state=btn)
         self._ocr_langs_entry.config(state=btn)
+        if _DIARIZATION_AVAILABLE:
+            self._diarize_checkbox.config(state=btn)
+            self._hf_token_entry.config(state=btn)
         self._confirm_button.config(
             state=btn,
             bg=T.C_ACCENT_D if busy else T.C_ACCENT,
@@ -102,11 +111,6 @@ class TranscribeTab:
         )
         self._translate_checkbox.pack(anchor="w")
 
-        # On-screen text extraction uses OCR (EasyOCR) to read text visible in
-        # the video frames.  Useful for recipe, tutorial, and instructional videos
-        # where key steps appear as on-screen titles or overlays.
-        # Each transcript entry is labelled [SPEECH] or [ON-SCREEN] so the two
-        # sources are always distinguishable in the output.
         self._onscreen_checkbox = tk.Checkbutton(
             opt_card,
             text="Extract on-screen text  (OCR)",
@@ -120,7 +124,6 @@ class TranscribeTab:
 
         # Language picker — shown only when OCR is enabled
         self._ocr_langs_frame = tk.Frame(opt_card, bg=T.C_CARD)
-        # (not packed yet — _toggle_ocr_langs controls visibility)
 
         tk.Label(
             self._ocr_langs_frame, text="Languages (comma-separated)",
@@ -142,6 +145,55 @@ class TranscribeTab:
             font=("Segoe UI", 8), bg=T.C_CARD, fg=T.C_TEXT_2,
         ).pack(anchor="w")
 
+        # Speaker labels (diarization) — disabled when pyannote not installed
+        diarize_text = (
+            "Speaker labels  (diarization)"
+            if _DIARIZATION_AVAILABLE
+            else "Speaker labels  (install pyannote.audio)"
+        )
+        self._diarize_checkbox = tk.Checkbutton(
+            opt_card,
+            text=diarize_text,
+            variable=self._diarize_var,
+            font=T.FONT_LABEL,
+            bg=T.C_CARD,
+            fg=T.C_TEXT_1 if _DIARIZATION_AVAILABLE else T.C_TEXT_3,
+            activebackground=T.C_CARD,
+            activeforeground=T.C_TEXT_1,
+            selectcolor=T.C_ACCENT,
+            relief="flat", bd=0,
+            cursor="hand2" if _DIARIZATION_AVAILABLE else "arrow",
+            state="normal" if _DIARIZATION_AVAILABLE else "disabled",
+            command=self._toggle_hf_token,
+        )
+        self._diarize_checkbox.pack(anchor="w", pady=(4, 0))
+
+        # HF token entry — shown only when diarize is enabled
+        self._hf_token_frame = tk.Frame(opt_card, bg=T.C_CARD)
+
+        tk.Label(
+            self._hf_token_frame, text="Hugging Face token",
+            font=T.FONT_LABEL, bg=T.C_CARD, fg=T.C_TEXT_2,
+        ).pack(anchor="w", pady=(6, 1))
+
+        self._hf_token_entry = tk.Entry(
+            self._hf_token_frame, textvariable=self._hf_token_var,
+            show="*",
+            font=T.FONT_LABEL, bg=T.C_CARD, fg=T.C_TEXT_1,
+            insertbackground=T.C_TEXT_1, relief="flat",
+            highlightthickness=1, highlightbackground=T.C_BORDER,
+            highlightcolor=T.C_ACCENT,
+        )
+        self._hf_token_entry.pack(fill="x", pady=(0, 2))
+
+        tk.Label(
+            self._hf_token_frame,
+            text="Requires access to pyannote/speaker-diarization-3.1",
+            font=("Segoe UI", 8), bg=T.C_CARD, fg=T.C_TEXT_2,
+            wraplength=T.SIDEBAR_W - T.PAD_H * 2 - T.PAD_CARD * 2 - 20,
+            justify="left",
+        ).pack(anchor="w")
+
         # Transcribe button
         btn_frame = tk.Frame(parent, bg=T.C_SIDEBAR)
         btn_frame.pack(fill="x", padx=T.PAD_H, pady=(16, 10))
@@ -155,14 +207,18 @@ class TranscribeTab:
         hover(self._confirm_button, T.C_ACCENT, T.C_ACCENT_H)
 
     def _toggle_ocr_langs(self) -> None:
-        """Show/hide the language picker based on the OCR checkbox state."""
         if self._onscreen_var.get():
             self._ocr_langs_frame.pack(fill="x", padx=(20, 0), pady=(0, 4))
         else:
             self._ocr_langs_frame.pack_forget()
 
+    def _toggle_hf_token(self) -> None:
+        if self._diarize_var.get():
+            self._hf_token_frame.pack(fill="x", padx=(20, 0), pady=(0, 4))
+        else:
+            self._hf_token_frame.pack_forget()
+
     def _parse_ocr_languages(self) -> list[str]:
-        """Parse the language entry (comma/space separated) into a list of codes."""
         raw = self._ocr_langs_var.get()
         codes = [c.strip() for c in raw.replace(",", " ").split() if c.strip()]
         return codes if codes else ["en"]
@@ -172,6 +228,14 @@ class TranscribeTab:
         if not path:
             messagebox.showwarning("No file selected", "Please select a file first.")
             return
+        diarize   = _DIARIZATION_AVAILABLE and self._diarize_var.get()
+        hf_token  = self._hf_token_var.get().strip()
+        if diarize and not hf_token:
+            messagebox.showwarning(
+                "HF token required",
+                "Enter your Hugging Face access token to use speaker diarization.",
+            )
+            return
         self._on_transcribe(
             path,
             self._model_var.get(),
@@ -179,5 +243,7 @@ class TranscribeTab:
             self._translate_var.get(),
             self._max_words_var.get(),
             self._onscreen_var.get(),
-            self._parse_ocr_languages(),  # OCR language list (only used when OCR is enabled)
+            self._parse_ocr_languages(),
+            diarize,
+            hf_token,
         )

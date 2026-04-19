@@ -37,6 +37,8 @@ class TranscriptionController:
         on_done:     Called on the main thread after success *or* error.
         on_log:      Called (from background thread) with ``(message, level)``
                      for the activity log — route through ``root.after()``.
+        on_stage:    Called (from background thread) with a stage string like
+                     ``"Step 1/3 — Transcribing…"`` — route through ``root.after()``.
     """
 
     def __init__(
@@ -68,6 +70,8 @@ class TranscriptionController:
         max_words_per_line: int,
         extract_onscreen: bool = False,
         ocr_languages: list[str] | None = None,
+        diarize: bool = False,
+        hf_token: str = "",
         cancel_event: threading.Event = None,
     ) -> None:
         """
@@ -83,6 +87,8 @@ class TranscriptionController:
             max_words_per_line: SRT word limit per block.
             extract_onscreen:  Run OCR and interleave on-screen text.
             ocr_languages:     EasyOCR language codes (only used when extract_onscreen=True).
+            diarize:           Run speaker diarization and label each segment.
+            hf_token:          Hugging Face token (required when diarize=True).
             cancel_event:      Set this event to request cancellation.
         """
         self._on_start()
@@ -91,6 +97,7 @@ class TranscriptionController:
             args=(
                 path, model_name, export_format, do_translate,
                 max_words_per_line, extract_onscreen, ocr_languages,
+                diarize, hf_token,
                 cancel_event or threading.Event(),
             ),
             daemon=True,
@@ -109,7 +116,6 @@ class TranscriptionController:
             self._on_stage(text)
 
     def _check_cancel(self, cancel_event: threading.Event) -> None:
-        """Raise OperationCancelledError if the user has requested a cancel."""
         if cancel_event.is_set():
             raise OperationCancelledError("Transcription cancelled by user.")
 
@@ -122,31 +128,49 @@ class TranscriptionController:
         max_words_per_line: int,
         extract_onscreen: bool,
         ocr_languages: list[str] | None,
+        diarize: bool,
+        hf_token: str,
         cancel_event: threading.Event,
     ) -> None:
         try:
             filename = os.path.basename(path)
 
-            total = 3 if extract_onscreen else 2
+            total = 2 + int(extract_onscreen) + int(diarize and bool(hf_token))
+            step  = 0
 
             # ── Stage 1: Transcribe with Whisper ──────────────────────
-            self._stage(f"Step 1/{total} — Transcribing with Whisper…")
+            step += 1
+            self._stage(f"Step {step}/{total} — Transcribing with Whisper…")
             self._log(f"Transcribing: {filename}", "stage")
             self._log(f"  model={model_name}  format={export_format.value}  translate={do_translate}", "detail")
             if extract_onscreen and ocr_languages:
                 self._log(f"  OCR languages: {ocr_languages}", "detail")
+            if diarize and hf_token:
+                self._log("  Speaker diarization: enabled", "detail")
+
+            # Build the on_diarize_stage callback so the service can trigger
+            # the sidebar label update at the right moment.
+            diarize_step = step + 1
+            on_diarize_stage = (
+                (lambda: self._stage(f"Step {diarize_step}/{total} — Identifying speakers…"))
+                if (diarize and hf_token) else None
+            )
 
             text = self._svc.transcribe(
                 path, model_name, export_format, do_translate, max_words_per_line,
                 extract_onscreen=extract_onscreen,
                 ocr_languages=ocr_languages,
+                diarize=diarize,
+                hf_token=hf_token,
+                on_diarize_stage=on_diarize_stage,
                 on_log=self._on_log,
             )
 
             self._check_cancel(cancel_event)
 
-            # ── Stage 2 (or 3): Save to disk ──────────────────────────
-            self._stage(f"Step {total}/{total} — Saving transcript…")
+            # ── Final stage: Save to disk ──────────────────────────────
+            total_actual = total  # recalc in case diarize was skipped
+            self._stage(f"Step {total_actual}/{total_actual} — Saving transcript…")
             self._log("Saving transcript to disk…", "detail")
             output_path = self._file.save_transcription(path, text, export_format)
             self._log(f"Saved → {output_path}", "detail")
