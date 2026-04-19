@@ -1,15 +1,14 @@
 ---
 name: viral-influencer
 description: >
-  Personal viral content strategy system — a VTuber and TikTok short-form creator active
-  in gaming, Live2D rigging, and model-building content. Use this skill for any content creation
-  task: scripting TikTok videos, writing hooks, improving retention, auditing video ideas, planning
-  content calendars, understanding algorithm signals, or growing a following. Also trigger for
-  behind-the-scenes content (Live2D rigging, model reveals, wing builds), VTuber lore and persona
-  content, and anything related to the creative pipeline. Trigger for casual phrasing too —
-  "how do I make this hit", "write me a script for this", "what's a good hook", "why did this flop",
-  "what should I post", "is this idea good", "help me script this". If it touches content creation
-  in any form — script it, audit it, or improve it using this skill. Apply the full framework:
+  Personal viral content strategy system for short-form and long-form creators. Use this skill
+  for any content creation task: scripting videos, writing hooks, improving retention, auditing
+  video ideas, planning content calendars, understanding algorithm signals, or growing a following.
+  Works for all content types — gaming, VTuber, tutorial, cooking, lifestyle, podcast clipping,
+  educational, and more. Trigger for casual phrasing too — "how do I make this hit",
+  "write me a script for this", "what's a good hook", "why did this flop", "what should I post",
+  "is this idea good", "help me script this". If it touches content creation in any form —
+  script it, audit it, or improve it using this skill. Apply the full framework:
   Hook → Retention → Engagement → Algorithm → Niche.
 model: sonnet
 color: purple
@@ -18,8 +17,8 @@ memory: project
 
 # Viral Influencer Skill
 
-Personal system for creating viral content, mastering platform algorithms, and growing as
-a VTuber and short-form creator. The full 5-pillar framework applies to every content task.
+Personal system for creating engaging content, mastering platform algorithms, and growing as
+a creator across any format or niche. The full 5-pillar framework applies to every content task.
 
 ---
 
@@ -159,32 +158,46 @@ Viral content that doesn't feel true to your identity burns out fast. Sustainabl
 ### Niche-Specific Content Playbooks
 
 **Gaming:**
-- Clip the **reaction**, not just the moment — your face cam during a crazy moment > the moment alone
+- Clip the **reaction**, not just the moment — face cam during a crazy moment > the moment alone
 - "Skill diff" / moments of mastery perform well
 - Collabs with other gaming creators compound reach fast
 - Rage, shock, and wholesome moments are the 3 emotional pillars of gaming content
 - Tier lists and hot takes consistently generate comments
 
 **VTuber:**
-- Lean into **lore and character depth** — fans who connect with your persona share more and become advocates, not just viewers
-- **Behind-the-scenes content is underutilised gold** — rigging process videos, wing builds from scratch, model reveals, and iteration breakdowns perform strongly because they show work no one else is showing
-- **Live2D content has a built-in curiosity hook** — most people have no idea how VTuber models work. "How I built my wings from scratch" is automatically interesting to a wide audience, not just VTubers
-- Debut clips, model reveals, and lore drops are high-virality events — plan content around them well in advance
-- Clip compilation of best stream moments = low effort, high return — build the habit of flagging moments during streams
-- Community events (viewer games, art challenges, design votes for new model elements) drive saves and shares
+- Lean into **lore and character depth** — fans who connect with your persona share more and become advocates
+- **Behind-the-scenes content is underutilised gold** — rigging process videos, model reveals, and iteration breakdowns show work no one else is showing
+- **Live2D content has a built-in curiosity hook** — most people have no idea how VTuber models work; "How I built my wings from scratch" is interesting to a wide audience
+- Debut clips, model reveals, and lore drops are high-virality events — plan content around them in advance
+- Clip compilation of best stream moments = low effort, high return — flag moments during streams
 
-**Lifestyle:**
+**Tutorial & Educational:**
+- Lead with the result — show the finished thing, then explain how
+- The single most counterintuitive or surprising step is almost always the best standalone clip
+- "Did you know you can do X in Y?" format consistently performs well
+- Numbered lists and step-by-step structures drive saves — people want to come back to reference material
+- Expertise signals (specific terminology used correctly, confident delivery, correct results) build trust faster than production value
+
+**Cooking & Recipe:**
+- The reveal (finished dish, plating, tasting reaction) is the most shareable moment — lead with it
+- The most interesting technique step is the clip worth extracting; full recipes belong in descriptions
+- On-screen text for ingredients/measurements dramatically increases saves on Instagram and TikTok
+- Sensory language in voiceover ("golden brown", "crispy", "melts instantly") activates the viewer's imagination
+- Before/after of raw → cooked is a reliable hook format
+
+**Podcast & Interview:**
+- The best clip usually starts mid-conversation; trim the setup and open on the strongest sentence
+- "Unpopular opinion" and "hot take" clips generate more comments than any other format
+- The guest's most surprising statement is almost always the most shareable moment
+- Story beats (anecdote with setup → tension → resolution) are more retainable than pure insight clips
+- Subtitles are non-negotiable — most podcast clips are watched without sound
+
+**Lifestyle & Vlogging:**
 - "Day in my life" underperforms without a strong hook — frame as "What I actually do as a [identity]"
-- "Routine" content + aesthetic visuals = saves magnet
 - Contrast storytelling ("Before vs After", "Expectation vs Reality") is always evergreen
 - Authenticity beats polish — unfiltered moments outperform overproduced ones
-- Anchor lifestyle content to a specific identity ("as someone who WFH full-time...")
-
-**Vlogging:**
-- Story arc is mandatory: Setup → Conflict/Challenge → Resolution
-- Travel content: Show the unexpected, not just the pretty
 - The more specific the experience, the more universal it feels (paradox of specificity)
-- Talking-to-camera charisma compounds over time — study your own watch-through rate
+- Story arc is mandatory: Setup → Conflict/Challenge → Resolution
 
 ---
 
@@ -240,6 +253,10 @@ Examples:
 - "I tracked every hour of my WFH day for a week and the results are embarrassing" (Data reveal + Lifestyle + relatable shame)
 - "Ranking every game I've played this year by how much it hurt me emotionally" (Tier list + Gaming + vulnerability)
 - "The part of VTubing nobody talks about" (Taboo reveal + VTuber + curiosity)
+- "I made the same recipe 5 times to figure out what actually matters" (Test + Cooking + insight)
+- "Everything I wish someone told me before starting [X]" (Expertise transfer + any niche + relatability)
+- "The technique everyone gets wrong (and how to fix it)" (Correction + Tutorial + authority signal)
+- "I sat through 10 hours of [topic] so you don't have to" (Sacrifice + Educational + humor)
 
 **Ideation Triggers to always use:**
 1. What's trending in the niche RIGHT NOW? (use this to ride waves, not lag them)

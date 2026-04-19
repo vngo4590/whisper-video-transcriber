@@ -25,11 +25,13 @@ from src.models import DEFAULT_CLAUDE_MODEL
 
 FOCUS_OPTIONS: list[str] = [
     "All highlights",
-    "Funny moments",
-    "Gaming highlights",
-    "Emotional moments",
-    "Educational content",
-    "VTuber / streaming moments",
+    "Key insights & takeaways",
+    "Step-by-step instructions",
+    "Funny & entertaining moments",
+    "Emotional & story moments",
+    "Debate & controversial opinions",
+    "Demonstrations & reveals",
+    "Gaming & live event highlights",
     "Custom",
 ]
 
