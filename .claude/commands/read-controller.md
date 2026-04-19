@@ -7,7 +7,8 @@ Steps:
 
 3. For `TranscriptionController`:
    - GRASP Controller: mediates the "Transcribe" system event without owning widgets or Whisper internals.
-   - Callback contract: `on_start`, `on_success`, `on_error`, `on_done`, `on_log` — explain each and why callbacks decouple the controller from tkinter.
+   - Callback contract: `on_start`, `on_success`, `on_error`, `on_done`, `on_log`, `on_stage` — explain each and why callbacks decouple the controller from tkinter.
+   - `on_stage` callback: called with `"Step N/M — …"` strings so the sidebar status label shows pipeline position; `"Step 1/2 — Transcribing with Whisper…"` and `"Step 2/2 — Saving transcript…"` (or 3 steps when OCR is enabled).
    - Cancellation: how `cancel_event: threading.Event` is passed into `run()` and checked via `_check_cancel()` between the Whisper pass and the OCR pass.
    - `on_log` forwarding: how detailed Whisper/OCR progress messages reach the ActivityLogPanel.
 

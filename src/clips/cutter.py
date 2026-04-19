@@ -18,6 +18,30 @@ import ffmpeg
 
 from src.models import ASPECT_RATIO_SIZES, CLIP_BITRATE, CLIP_FPS, AspectRatio, Segment
 
+# ---------------------------------------------------------------------------
+# SRT helpers used by burn_captions
+# ---------------------------------------------------------------------------
+
+_SRT_BLOCK = re.compile(
+    r"\d+\n(\d{2}:\d{2}:\d{2},\d{3}) --> (\d{2}:\d{2}:\d{2},\d{3})\n(.*?)(?=\n\d+\n|\Z)",
+    re.DOTALL,
+)
+
+
+def _srt_to_secs(ts: str) -> float:
+    h, m, rest = ts.split(":")
+    s, ms = rest.split(",")
+    return int(h) * 3600 + int(m) * 60 + int(s) + int(ms) / 1000.0
+
+
+def _secs_to_srt(secs: float) -> str:
+    secs = max(0.0, secs)
+    ms = int(round(secs * 1000))
+    h, ms = divmod(ms, 3_600_000)
+    m, ms = divmod(ms, 60_000)
+    s, ms = divmod(ms, 1_000)
+    return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
+
 
 def _safe_filename(text: str) -> str:
     slug = re.sub(r"[^\w\s-]", "", text.lower())
@@ -144,6 +168,90 @@ class VideoCutter:
                 os.unlink(list_file)
             except (OSError, UnboundLocalError):
                 pass
+
+    # ------------------------------------------------------------------
+    # Public — caption burn-in
+    # ------------------------------------------------------------------
+
+    def burn_captions(
+        self,
+        clip_path: str,
+        srt_path: str,
+        clip_start: float,
+        clip_end: float,
+    ) -> str:
+        """
+        Burn SRT captions into an existing single-segment clip.
+
+        Parses *srt_path*, filters entries that fall within [clip_start, clip_end],
+        shifts all timestamps by -clip_start so they align with the clip timeline,
+        writes a temporary SRT, then re-encodes via ffmpeg with the subtitles filter.
+
+        Args:
+            clip_path:  Path to the existing clip file.
+            srt_path:   Path to the full-video SRT file.
+            clip_start: Start time (seconds) of the clip in the source video.
+            clip_end:   End time (seconds) of the clip in the source video.
+
+        Returns:
+            Path to the new captioned clip (``clip_path`` with ``_captioned`` suffix).
+
+        Raises:
+            FileNotFoundError: If *srt_path* does not exist.
+            ValueError:        If no SRT entries fall within the clip range.
+        """
+        if not os.path.exists(srt_path):
+            raise FileNotFoundError(f"SRT file not found: {srt_path}")
+
+        srt_text = open(srt_path, encoding="utf-8").read()
+        entries: list[tuple[float, float, str]] = []
+        for m in _SRT_BLOCK.finditer(srt_text):
+            ts_start = _srt_to_secs(m.group(1))
+            ts_end   = _srt_to_secs(m.group(2))
+            body     = m.group(3).strip()
+            # Include entry if it overlaps with the clip range at all
+            if ts_start < clip_end and ts_end > clip_start:
+                new_start = max(0.0, ts_start - clip_start)
+                new_end   = max(0.0, ts_end   - clip_start)
+                entries.append((new_start, new_end, body))
+
+        if not entries:
+            raise ValueError("No SRT entries found in the clip's time range.")
+
+        # Write adjusted SRT to a temp file in the same directory as the clip
+        tmp_srt = os.path.join(tempfile.gettempdir(), "_whisperui_burn.srt")
+        with open(tmp_srt, "w", encoding="utf-8") as f:
+            for i, (s, e, body) in enumerate(entries, start=1):
+                f.write(f"{i}\n{_secs_to_srt(s)} --> {_secs_to_srt(e)}\n{body}\n\n")
+
+        base, ext = os.path.splitext(clip_path)
+        out_path = base + "_captioned" + ext
+
+        # Escape the SRT path for ffmpeg's subtitles filter (Windows: \ → /, : → \:)
+        srt_escaped = tmp_srt.replace("\\", "/").replace(":", "\\:")
+
+        try:
+            (
+                ffmpeg
+                .input(clip_path)
+                .output(
+                    out_path,
+                    vf=f"subtitles='{srt_escaped}'",
+                    acodec="aac",
+                    vcodec="libx264",
+                    video_bitrate=CLIP_BITRATE,
+                    movflags="+faststart",
+                )
+                .overwrite_output()
+                .run(quiet=True)
+            )
+        finally:
+            try:
+                os.unlink(tmp_srt)
+            except OSError:
+                pass
+
+        return out_path
 
     # ------------------------------------------------------------------
     # Private — aspect ratio filter

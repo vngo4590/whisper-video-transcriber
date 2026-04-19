@@ -16,6 +16,7 @@ Steps:
    - How multi-segment clips are assembled (concat filter or sequential cuts).
    - Aspect ratio handling: `ASPECT_RATIO_SIZES` lookup, crop/pad logic.
    - ffmpeg-python pipeline: why it is used instead of subprocess strings.
+   - `burn_captions(clip_path, srt_path, clip_start, clip_end) -> str`: parses source SRT with `_SRT_BLOCK` regex, filters entries overlapping the clip window, shifts timestamps by `-clip_start`, writes a temp SRT file, re-encodes with ffmpeg `subtitles` filter; Windows path escaping (backslash → forward slash, colon → `\:`). Returns path to the new `_captioned.mp4` file. Only exposed for single-segment clips in `ClipsPanel`.
 
 4. For `word_refiner.py`:
    - `build_word_index()`: what it returns and what data it needs from Whisper segments.

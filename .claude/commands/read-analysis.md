@@ -1,7 +1,7 @@
 Read and explain the analysis package: `src/analysis/`.
 
 Steps:
-1. Read all five files: `src/analysis/detector.py`, `src/analysis/audio.py`, `src/analysis/visual.py`, `src/analysis/vision.py`, `src/analysis/content_planner.py`.
+1. Read all six files: `src/analysis/detector.py`, `src/analysis/audio.py`, `src/analysis/visual.py`, `src/analysis/vision.py`, `src/analysis/content_planner.py`, `src/analysis/chapters.py`.
 
 2. For `detector.py` — the strategy dispatcher:
    - `detect_moments()`: parameters, how it dispatches to audio/visual/vision sub-analysers based on the `strategies: set[AnalysisStrategy]` argument.
@@ -29,4 +29,10 @@ Steps:
    - `format_plan()`: the plain-text rendering pipeline (overview → ranked highlights → posting calendar → overall notes).
    - `_ts()` and `_wrap()` helpers.
 
-7. Identify the extension point: how to add a new `AnalysisStrategy` — add the enum value in `models.py`, implement a module in `src/analysis/`, register it in `detector.py`.
+7. For `chapters.py` — chapter/topic segmentation:
+   - `generate_chapters(transcript, api_key, claude_model, max_chapters, on_log)`: loads system prompt and user template from `prompts/chapter_prompts.md`, calls Claude API, parses JSON response.
+   - Return type: sorted list of chapter dicts with keys: `chapter`, `title`, `start_time`, `end_time`, `summary`, `key_points`.
+   - How `on_log` is used to emit progress to the Activity Log.
+   - Triggered from the Transcript panel "Generate Chapters" button via `App._on_generate_chapters_requested`.
+
+8. Identify the extension point: how to add a new `AnalysisStrategy` — add the enum value in `models.py`, implement a module in `src/analysis/`, register it in `detector.py`.

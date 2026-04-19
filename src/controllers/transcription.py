@@ -48,6 +48,7 @@ class TranscriptionController:
         on_error,
         on_done,
         on_log=None,
+        on_stage=None,
     ):
         self._svc      = transcription_service
         self._file     = file_handler
@@ -56,6 +57,7 @@ class TranscriptionController:
         self._on_error   = on_error
         self._on_done    = on_done
         self._on_log     = on_log
+        self._on_stage   = on_stage
 
     def run(
         self,
@@ -99,9 +101,12 @@ class TranscriptionController:
     # ------------------------------------------------------------------
 
     def _log(self, msg: str, level: str = "info") -> None:
-        """Forward to the on_log callback if one was registered."""
         if self._on_log:
             self._on_log(msg, level)
+
+    def _stage(self, text: str) -> None:
+        if self._on_stage:
+            self._on_stage(text)
 
     def _check_cancel(self, cancel_event: threading.Event) -> None:
         """Raise OperationCancelledError if the user has requested a cancel."""
@@ -122,7 +127,10 @@ class TranscriptionController:
         try:
             filename = os.path.basename(path)
 
+            total = 3 if extract_onscreen else 2
+
             # ── Stage 1: Transcribe with Whisper ──────────────────────
+            self._stage(f"Step 1/{total} — Transcribing with Whisper…")
             self._log(f"Transcribing: {filename}", "stage")
             self._log(f"  model={model_name}  format={export_format.value}  translate={do_translate}", "detail")
             if extract_onscreen and ocr_languages:
@@ -135,10 +143,10 @@ class TranscriptionController:
                 on_log=self._on_log,
             )
 
-            # Check cancellation after the (potentially long) Whisper pass
             self._check_cancel(cancel_event)
 
-            # ── Stage 2: Save to disk ─────────────────────────────────
+            # ── Stage 2 (or 3): Save to disk ──────────────────────────
+            self._stage(f"Step {total}/{total} — Saving transcript…")
             self._log("Saving transcript to disk…", "detail")
             output_path = self._file.save_transcription(path, text, export_format)
             self._log(f"Saved → {output_path}", "detail")

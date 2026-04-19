@@ -15,6 +15,8 @@ import os
 import sys
 from pathlib import Path
 
+MAX_RECENT_FILES = 8
+
 
 # ---------------------------------------------------------------------------
 # Internal path resolution
@@ -78,3 +80,17 @@ def clear() -> None:
         _CONFIG_FILE.unlink(missing_ok=True)
     except OSError:
         pass
+
+
+def get_recent_files() -> list[str]:
+    """Return the recent-files list, filtering out paths that no longer exist."""
+    return [p for p in _read().get("recent_files", []) if os.path.exists(p)]
+
+
+def add_recent_file(path: str) -> None:
+    """Prepend *path* to the recent-files list, capped at MAX_RECENT_FILES."""
+    data = _read()
+    recent = [p for p in data.get("recent_files", []) if p != path]
+    recent.insert(0, path)
+    data["recent_files"] = recent[:MAX_RECENT_FILES]
+    _write(data)

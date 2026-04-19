@@ -5,3 +5,4 @@ pillow
 anthropic
 numpy
 easyocr
+tkinterdnd2

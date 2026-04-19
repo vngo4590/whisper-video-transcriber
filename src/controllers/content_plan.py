@@ -110,8 +110,10 @@ class ContentPlanController:
         try:
             filename = os.path.basename(path)
 
+            total = 2 + bool(analysis_strategies)
+
             # ── Stage 1: Transcribe ────────────────────────────────────
-            self._on_stage("Transcribing video…")
+            self._on_stage(f"Step 1/{total} — Transcribing video…")
             _log(f"Transcribing: {filename}  model={model_name}", "stage")
             _log("  word_timestamps=True  task=transcribe", "detail")
 
@@ -127,7 +129,7 @@ class ContentPlanController:
             moments: list[dict] = []
             if analysis_strategies:
                 names = ", ".join(s.value.replace("_", " ") for s in analysis_strategies)
-                self._on_stage(f"Analysing moments  ({names})…")
+                self._on_stage(f"Step 2/{total} — Analysing moments  ({names})…")
                 _log(f"Moment analysis: {names}", "stage")
                 moments = detect_moments(
                     video_path     = path,
@@ -143,7 +145,7 @@ class ContentPlanController:
             transcript = ClipsController._build_timestamped_transcript(whisper_segs, moments)
 
             # ── Stage 2: Generate content plan ─────────────────────────
-            self._on_stage("Generating content plan with Claude…")
+            self._on_stage(f"Step {total}/{total} — Generating content plan with Claude…")
             _log("Generating content plan…", "stage")
             plan_text = generate_plan(
                 transcript     = transcript,

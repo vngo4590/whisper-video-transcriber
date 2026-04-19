@@ -58,6 +58,9 @@ class ContentPlanTab:
     # Public API — called by LeftPanel to reflect processing state
     # ------------------------------------------------------------------
 
+    def submit(self) -> None:
+        self._handle_submit()
+
     def set_busy(self, busy: bool) -> None:
         btn   = "disabled" if busy else "normal"
         combo = "disabled" if busy else "readonly"

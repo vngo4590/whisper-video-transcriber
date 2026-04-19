@@ -47,6 +47,9 @@ class TranscribeTab:
 
         self._build(parent)
 
+    def submit(self) -> None:
+        self._handle_submit()
+
     def set_busy(self, busy: bool) -> None:
         btn = "disabled" if busy else "normal"
         self._radio_srt.config(state=btn)

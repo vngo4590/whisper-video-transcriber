@@ -72,6 +72,9 @@ class VideoClipsTab:
         # Auto-check audio energy when Highlights mode is selected
         self._clip_mode_var.trace_add("write", self._on_clip_mode_changed)
 
+    def submit(self) -> None:
+        self._handle_submit()
+
     def set_busy(self, busy: bool) -> None:
         btn   = "disabled" if busy else "normal"
         combo = "disabled" if busy else "readonly"

@@ -79,6 +79,13 @@ class LeftPanel:
         """Update the status label text with the current pipeline stage name."""
         self._loading_label.config(text=text, fg=T.C_WARN)
 
+    def submit_active(self) -> None:
+        """Trigger the submit action on whichever mode tab is currently selected."""
+        idx = self._mode_nb.index("current")
+        tabs = [self._transcribe_tab, self._clips_tab, self._plan_tab]
+        if 0 <= idx < len(tabs):
+            tabs[idx].submit()
+
     # ------------------------------------------------------------------
     # Private
     # ------------------------------------------------------------------
@@ -173,8 +180,9 @@ class LeftPanel:
 
         # Mode notebook
         tk.Frame(inner, bg=T.C_BORDER, height=1).pack(fill="x", padx=T.PAD_H, pady=(14, 0))
-        mode_nb = ttk.Notebook(inner, style="Dark.TNotebook")
-        mode_nb.pack(fill="x", padx=T.PAD_H, pady=(8, 0))
+        self._mode_nb = ttk.Notebook(inner, style="Dark.TNotebook")
+        self._mode_nb.pack(fill="x", padx=T.PAD_H, pady=(8, 0))
+        mode_nb = self._mode_nb
 
         transcribe_frame = tk.Frame(mode_nb, bg=T.C_SIDEBAR)
         clips_frame      = tk.Frame(mode_nb, bg=T.C_SIDEBAR)

@@ -128,8 +128,11 @@ class ClipsController:
         try:
             filename = os.path.basename(path)
 
-            # ── Stage 1: Transcribe ────────────────────────────────────
-            self._on_stage("Transcribing video…")
+            step = 0
+            total_pre = (2 + bool(analysis_strategies) + bool(word_index or True))
+
+            step += 1
+            self._on_stage(f"Step {step} — Transcribing video…")
             _log(f"Transcribing: {filename}  model={model_name}", "stage")
             _log(f"  word_timestamps=True  task=transcribe", "detail")
 
@@ -147,8 +150,9 @@ class ClipsController:
             # ── Stage 1b: Moment analysis (strategy-driven) ───────────
             moments: list[dict] = []
             if analysis_strategies:
+                step += 1
                 strategy_names = ", ".join(s.value.replace("_", " ") for s in analysis_strategies)
-                self._on_stage(f"Analysing moments  ({strategy_names})…")
+                self._on_stage(f"Step {step} — Analysing moments  ({strategy_names})…")
                 _log(f"Moment analysis: {strategy_names}", "stage")
                 moments = detect_moments(
                     video_path       = path,
@@ -164,7 +168,8 @@ class ClipsController:
             timestamped = self._build_timestamped_transcript(whisper_segs, moments)
 
             # ── Stage 2: Analyse with Claude ──────────────────────────
-            self._on_stage("Analysing transcript with Claude…")
+            step += 1
+            self._on_stage(f"Step {step} — Analysing transcript with Claude…")
             _log("Sending transcript to Claude for clip selection…", "stage")
             clips = self._analyzer.find_viral_moments(
                 transcript           = timestamped,
@@ -187,12 +192,13 @@ class ClipsController:
             _log(f"Claude selected {len(clips)} clip(s)", "detail")
 
             # ── Stage 2b: Snap to speech-segment or word boundaries ───
+            step += 1
             if not allow_cut_anywhere:
-                self._on_stage("Aligning cuts to speech boundaries…")
+                self._on_stage(f"Step {step} — Aligning cuts to speech boundaries…")
                 _log("Snapping cut points to speech segment boundaries…", "stage")
                 clips = self._snap_boundaries(clips, seg_boundaries, video_duration)
             elif word_index:
-                self._on_stage("Snapping cuts to word boundaries…")
+                self._on_stage(f"Step {step} — Snapping cuts to word boundaries…")
                 _log("Snapping cut points to word boundaries (free-cut mode)…", "stage")
                 clips = snap_to_word_boundary(clips, word_index, video_duration)
             _check_cancel()
@@ -207,7 +213,8 @@ class ClipsController:
 
             # ── Stage 2d: Word-level refinement ───────────────────────
             if word_index:
-                self._on_stage("Removing fillers and stutters…")
+                step += 1
+                self._on_stage(f"Step {step} — Removing fillers and stutters…")
                 _log("Word-level refinement: removing fillers and stutter runs…", "stage")
                 clips = refine_all_clips(clips, word_index, min_segment_duration)
                 _log(f"  {len(clips)} clip(s) remain after refinement", "detail")
@@ -224,7 +231,7 @@ class ClipsController:
                 _check_cancel()
                 n_segs    = len(clip.segments)
                 seg_label = "1 segment" if n_segs == 1 else f"{n_segs} segments"
-                self._on_stage(f"Cutting clip {i}/{len(clips)}  ({seg_label}):  {clip.title}")
+                self._on_stage(f"Cutting clip {i}/{len(clips)} — {clip.title}")
                 _log(f"Cutting clip {i}/{len(clips)}: {clip.title}", "stage")
                 _log(f"  {seg_label}  {clip.timestamp_label}  ratio={aspect_ratio.value}", "detail")
 
