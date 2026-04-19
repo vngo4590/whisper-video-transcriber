@@ -135,29 +135,7 @@ class LeftPanel:
         self._model_menu.pack(fill="x")
         self._model_var.trace_add("write", lambda *_: settings.save(whisper_model=self._model_var.get()))
 
-        # Mode notebook
-        tk.Frame(inner, bg=T.C_BORDER, height=1).pack(fill="x", padx=T.PAD_H, pady=(14, 0))
-        mode_nb = ttk.Notebook(inner, style="Dark.TNotebook")
-        mode_nb.pack(fill="x", padx=T.PAD_H, pady=(8, 0))
-
-        transcribe_frame = tk.Frame(mode_nb, bg=T.C_SIDEBAR)
-        clips_frame      = tk.Frame(mode_nb, bg=T.C_SIDEBAR)
-        plan_frame       = tk.Frame(mode_nb, bg=T.C_SIDEBAR)
-        mode_nb.add(transcribe_frame, text="  Transcribe  ")
-        mode_nb.add(clips_frame,      text="  Video Clips  ")
-        mode_nb.add(plan_frame,       text="  Content Plan  ")
-
-        self._transcribe_tab = TranscribeTab(
-            transcribe_frame, self._selected_path, self._model_var, on_transcribe
-        )
-        self._clips_tab = VideoClipsTab(
-            clips_frame, self._selected_path, self._model_var, on_generate_clips
-        )
-        self._plan_tab = ContentPlanTab(
-            plan_frame, self._selected_path, self._model_var, on_generate_plan
-        )
-
-        # Shared: progress bar + status label + cancel button
+        # Shared: progress bar + status label + cancel button (above the mode tabs)
         prog_frame = tk.Frame(inner, bg=T.C_SIDEBAR)
         prog_frame.pack(fill="x", padx=T.PAD_H, pady=(10, 0))
 
@@ -192,6 +170,28 @@ class LeftPanel:
             pady=6,
         )
         # Do NOT pack here — show_loading(True) does that
+
+        # Mode notebook
+        tk.Frame(inner, bg=T.C_BORDER, height=1).pack(fill="x", padx=T.PAD_H, pady=(14, 0))
+        mode_nb = ttk.Notebook(inner, style="Dark.TNotebook")
+        mode_nb.pack(fill="x", padx=T.PAD_H, pady=(8, 0))
+
+        transcribe_frame = tk.Frame(mode_nb, bg=T.C_SIDEBAR)
+        clips_frame      = tk.Frame(mode_nb, bg=T.C_SIDEBAR)
+        plan_frame       = tk.Frame(mode_nb, bg=T.C_SIDEBAR)
+        mode_nb.add(transcribe_frame, text="  Transcribe  ")
+        mode_nb.add(clips_frame,      text="  Video Clips  ")
+        mode_nb.add(plan_frame,       text="  Content Plan  ")
+
+        self._transcribe_tab = TranscribeTab(
+            transcribe_frame, self._selected_path, self._model_var, on_transcribe
+        )
+        self._clips_tab = VideoClipsTab(
+            clips_frame, self._selected_path, self._model_var, on_generate_clips
+        )
+        self._plan_tab = ContentPlanTab(
+            plan_frame, self._selected_path, self._model_var, on_generate_plan
+        )
 
         # Footer
         tk.Frame(inner, bg=T.C_BORDER, height=1).pack(fill="x", padx=T.PAD_H, pady=(20, 0))
