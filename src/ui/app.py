@@ -158,8 +158,11 @@ class App:
     # Private — transcription callbacks
     # ------------------------------------------------------------------
 
-    def _on_transcribe_requested(self, path, model_name, export_format, do_translate, max_words_per_line):
-        self._transcription_controller.run(path, model_name, export_format, do_translate, max_words_per_line)
+    def _on_transcribe_requested(self, path, model_name, export_format, do_translate, max_words_per_line, extract_onscreen=False):
+        self._transcription_controller.run(
+            path, model_name, export_format, do_translate, max_words_per_line,
+            extract_onscreen=extract_onscreen,
+        )
 
     def _on_transcribe_start(self):
         # Called from the main thread (controller calls on_start before spawning thread)

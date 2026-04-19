@@ -55,17 +55,28 @@ class TranscriptionController:
         export_format: ExportFormat,
         do_translate: bool,
         max_words_per_line: int,
+        extract_onscreen: bool = False,
     ) -> None:
         """
         Start a background transcription thread.
 
         Returns immediately; results are delivered via the callbacks
         registered at construction time.
+
+        Args:
+            path:              Absolute path to the media file.
+            model_name:        Whisper model size.
+            export_format:     SRT or plain text.
+            do_translate:      Translate to English.
+            max_words_per_line: SRT word limit per block.
+            extract_onscreen:  When True, OCR is run on video frames and
+                               on-screen text is interleaved into the output,
+                               labelled [SPEECH] or [ON-SCREEN].
         """
         self._on_start()
         threading.Thread(
             target=self._worker,
-            args=(path, model_name, export_format, do_translate, max_words_per_line),
+            args=(path, model_name, export_format, do_translate, max_words_per_line, extract_onscreen),
             daemon=True,
         ).start()
 
@@ -73,9 +84,12 @@ class TranscriptionController:
     # Private
     # ------------------------------------------------------------------
 
-    def _worker(self, path, model_name, export_format, do_translate, max_words_per_line):
+    def _worker(self, path, model_name, export_format, do_translate, max_words_per_line, extract_onscreen):
         try:
-            text = self._svc.transcribe(path, model_name, export_format, do_translate, max_words_per_line)
+            text = self._svc.transcribe(
+                path, model_name, export_format, do_translate, max_words_per_line,
+                extract_onscreen=extract_onscreen,
+            )
             output_path = self._file.save_transcription(path, text, export_format)
             self._on_success(text, output_path)
         except Exception as exc:

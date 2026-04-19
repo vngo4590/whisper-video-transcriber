@@ -39,19 +39,20 @@ class TranscribeTab:
         self._model_var = model_var
         self._on_transcribe = on_transcribe
 
-        self._export_format_var = tk.StringVar(value=DEFAULT_EXPORT_FORMAT.value)
-        self._max_words_var = tk.IntVar(value=DEFAULT_MAX_WORDS_PER_LINE)
-        self._translate_var = tk.BooleanVar(value=False)
+        self._export_format_var  = tk.StringVar(value=DEFAULT_EXPORT_FORMAT.value)
+        self._max_words_var      = tk.IntVar(value=DEFAULT_MAX_WORDS_PER_LINE)
+        self._translate_var      = tk.BooleanVar(value=False)
+        self._onscreen_var       = tk.BooleanVar(value=False)
 
         self._build(parent)
 
     def set_busy(self, busy: bool) -> None:
-        btn   = "disabled" if busy else "normal"
-        combo = "disabled" if busy else "readonly"
+        btn = "disabled" if busy else "normal"
         self._radio_srt.config(state=btn)
         self._radio_plain.config(state=btn)
         self._max_words_spinbox.config(state=btn)
         self._translate_checkbox.config(state=btn)
+        self._onscreen_checkbox.config(state=btn)
         self._confirm_button.config(
             state=btn,
             bg=T.C_ACCENT_D if busy else T.C_ACCENT,
@@ -96,6 +97,21 @@ class TranscribeTab:
         )
         self._translate_checkbox.pack(anchor="w")
 
+        # On-screen text extraction uses OCR (EasyOCR) to read text visible in
+        # the video frames.  Useful for recipe, tutorial, and instructional videos
+        # where key steps appear as on-screen titles or overlays.
+        # Each transcript entry is labelled [SPEECH] or [ON-SCREEN] so the two
+        # sources are always distinguishable in the output.
+        self._onscreen_checkbox = tk.Checkbutton(
+            opt_card,
+            text="Extract on-screen text  (OCR)",
+            variable=self._onscreen_var,
+            font=T.FONT_LABEL, bg=T.C_CARD, fg=T.C_TEXT_1,
+            activebackground=T.C_CARD, activeforeground=T.C_TEXT_1,
+            selectcolor=T.C_ACCENT, relief="flat", bd=0, cursor="hand2",
+        )
+        self._onscreen_checkbox.pack(anchor="w", pady=(4, 0))
+
         # Transcribe button
         btn_frame = tk.Frame(parent, bg=T.C_SIDEBAR)
         btn_frame.pack(fill="x", padx=T.PAD_H, pady=(16, 10))
@@ -119,4 +135,5 @@ class TranscribeTab:
             ExportFormat(self._export_format_var.get()),
             self._translate_var.get(),
             self._max_words_var.get(),
+            self._onscreen_var.get(),   # whether to run OCR and extract on-screen text
         )
