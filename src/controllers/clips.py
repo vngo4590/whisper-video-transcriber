@@ -130,7 +130,6 @@ class ClipsController:
             filename = os.path.basename(path)
 
             step = 0
-            total_pre = (2 + bool(analysis_strategies) + bool(word_index or True))
 
             step += 1
             self._on_stage(f"Step {step} — Transcribing video…")
