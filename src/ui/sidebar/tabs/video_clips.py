@@ -64,7 +64,7 @@ class VideoClipsTab:
         self._clip_mode_var          = tk.StringVar(value=CLIP_MODE_LABELS[DEFAULT_CLIP_MODE])
         self._aspect_ratio_var       = tk.StringVar(value=ASPECT_RATIO_LABELS[DEFAULT_ASPECT_RATIO])
         self._max_clips_var          = tk.IntVar(value=DEFAULT_MAX_CLIPS)
-        self._min_segment_var        = tk.DoubleVar(value=0.5)
+        self._min_segment_var        = tk.DoubleVar(value=0.8)
         self._allow_cut_anywhere_var = tk.BooleanVar(value=False)
 
         self._build(parent)

@@ -28,7 +28,8 @@ def _get_video_duration(path: str) -> float:
     return float(probe["format"]["duration"])
 
 
-DEFAULT_MIN_SEGMENT_DURATION = 0.5   # seconds; user can override via the UI
+DEFAULT_MIN_SEGMENT_DURATION = 0.8   # seconds; user can override via the UI
+MIN_DURATION_EPSILON = 0.05          # tolerate timestamp float jitter
 
 
 class ClipsController:
@@ -369,8 +370,9 @@ class ClipsController:
         Clips that lose all segments after filtering are removed entirely.
         """
         valid_clips: list[ClipResult] = []
+        threshold = max(0.0, min_duration - MIN_DURATION_EPSILON)
         for clip in clips:
-            clip.segments = [s for s in clip.segments if s.duration >= min_duration]
+            clip.segments = [s for s in clip.segments if s.duration >= threshold]
             if clip.segments:
                 valid_clips.append(clip)
         return valid_clips

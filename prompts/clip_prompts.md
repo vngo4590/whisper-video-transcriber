@@ -176,17 +176,18 @@ You are cutting a short-form vertical video (TikTok / Instagram Reels / YouTube 
 Design {max_clips} short-form videos assembled from micro-cuts stitched together.
 
 REELS-SPECIFIC RULES (on top of the absolute rules):
-- Each cut must be one COMPLETE punchy phrase — 0.5–3 seconds per segment
-- Minimum segment duration: 0.5 seconds — no ghost cuts or sentence fragments
-- Maximum segment duration: 3 seconds — keep energy high, never linger
+- Each cut must be one COMPLETE punchy phrase — target 0.8–4 seconds per segment
+- Minimum segment duration: 0.8 seconds (hard floor 0.4 only when needed to preserve flow)
+- Maximum segment duration: 4 seconds (can stretch to 6 seconds if needed to finish a complete thought)
 - Segment boundaries must align to the speech segment timestamps in the transcript
 - Never split a sentence across two segments — finish the thought, then cut
 - Skip every [SILENCE] marker — cut boundary ends before it, starts after it
 - Never open on filler; the first word must be a hook word
-- Total assembled duration per video: 15–60 seconds (15–30 s is ideal)
+- Total assembled duration per video: 15–75 seconds (20–45 s is ideal)
 - End on a high note: strong claim, completed step, punchline, or open question
 - Do not include repetitive phrases — pick the most energetic delivery and cut the rest
 - Segments should flow together naturally even if non-chronological
+- TIMING TOLERANCE: if the best boundary-aligned cut is slightly outside target by <=0.5s, keep the cleaner narrative cut.
 
 EDITING STRATEGIES — apply at least one per video and name it in "strategy":
 - "pattern_of_3": find where speaker lists or repeats a concept 3 times — great rhythm
