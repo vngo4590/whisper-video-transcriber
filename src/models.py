@@ -88,6 +88,8 @@ CLIP_MODE_LABELS: dict[ClipMode, str] = {
     ClipMode.HIGHLIGHTS:  "Highlights  —  streamer peak moments",
 }
 
+DEFAULT_RAW_CUT_PADDING: float = 1.0   # seconds of padding added to each end of a raw segment
+
 DEFAULT_CLIP_MODE = ClipMode.SINGLE_SHOT
 
 

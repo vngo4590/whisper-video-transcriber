@@ -15,7 +15,7 @@ import whisper as _whisper_module
 
 from src.clips.analyzer import ClipAnalyzer
 from src.controllers import OperationCancelledError
-from src.models import AnalysisStrategy, AspectRatio, ClipMode, ClipResult, ExportFormat, Segment
+from src.models import AnalysisStrategy, AspectRatio, ClipMode, ClipResult, DEFAULT_RAW_CUT_PADDING, ExportFormat, Segment
 from src.analysis.detector import detect_moments
 from src.transcription.service import TranscriptionService
 from src.clips.cutter import VideoCutter
@@ -87,6 +87,8 @@ class ClipsController:
         min_clip_duration:     float | None = None,
         max_clip_duration:     float | None = None,
         cuts_per_clip:         int | None   = None,
+        raw_cuts:              bool          = False,
+        raw_cuts_padding:      float         = DEFAULT_RAW_CUT_PADDING,
     ) -> None:
         """Start the pipeline in a daemon thread; returns immediately."""
         threading.Thread(
@@ -98,6 +100,7 @@ class ClipsController:
                 analysis_strategies or set(),
                 cancel_event or threading.Event(),
                 min_clip_duration, max_clip_duration, cuts_per_clip,
+                raw_cuts, raw_cuts_padding,
             ),
             daemon=True,
         ).start()
@@ -124,6 +127,8 @@ class ClipsController:
         min_clip_duration:    float | None,
         max_clip_duration:    float | None,
         cuts_per_clip:        int | None,
+        raw_cuts:             bool,
+        raw_cuts_padding:     float,
     ) -> None:
         def _log(msg: str, level: str = "info") -> None:
             if self._on_log:
@@ -236,24 +241,59 @@ class ClipsController:
                     "Try a longer video or a different clip mode."
                 )
 
-            # ── Stage 3: Cut each clip ────────────────────────────────
-            for i, clip in enumerate(clips, start=1):
-                _check_cancel()
-                n_segs    = len(clip.segments)
-                seg_label = "1 segment" if n_segs == 1 else f"{n_segs} segments"
-                self._on_stage(f"Cutting clip {i}/{len(clips)} — {clip.title}")
-                _log(f"Cutting clip {i}/{len(clips)}: {clip.title}", "stage")
-                _log(f"  {seg_label}  {clip.timestamp_label}  ratio={aspect_ratio.value}", "detail")
-
-                clip.output_path = self._cutter.cut_clip(
-                    source_path  = path,
-                    segments     = clip.segments,
-                    index        = i,
-                    title        = clip.title,
-                    aspect_ratio = aspect_ratio,
+            # ── Stage 3: Cut ──────────────────────────────────────────
+            step += 1
+            if raw_cuts:
+                # ── Raw cuts: each segment → individual file in a folder ─
+                total_segs = sum(len(c.segments) for c in clips)
+                self._on_stage(
+                    f"Step {step} — Cutting {total_segs} raw segment(s) "
+                    f"across {len(clips)} clip(s)…"
                 )
-                _log(f"  → {clip.output_path}", "detail")
-                self._on_clip_done(clip)
+                _log(
+                    f"Raw cuts mode: {len(clips)} clip(s), {total_segs} segment(s), "
+                    f"padding={raw_cuts_padding}s  ratio={aspect_ratio.value}",
+                    "stage",
+                )
+
+                def _progress(clip_idx, seg_idx, total, out_path):
+                    self._on_stage(
+                        f"Step {step} — Raw cut {clip_idx}/{len(clips)} "
+                        f"· seg {seg_idx} → {os.path.basename(out_path)}"
+                    )
+                    _log(f"  → {out_path}", "detail")
+
+                out_folder = self._cutter.cut_raw_segments(
+                    source_path    = path,
+                    clips          = clips,
+                    padding        = raw_cuts_padding,
+                    video_duration = video_duration,
+                    aspect_ratio   = aspect_ratio,
+                    on_progress    = _progress,
+                )
+                _log(f"Raw cuts folder: {out_folder}", "success")
+                for clip in clips:
+                    self._on_clip_done(clip)
+
+            else:
+                # ── Normal: stitch segments into one assembled clip ───────
+                for i, clip in enumerate(clips, start=1):
+                    _check_cancel()
+                    n_segs    = len(clip.segments)
+                    seg_label = "1 segment" if n_segs == 1 else f"{n_segs} segments"
+                    self._on_stage(f"Step {step} — Cutting clip {i}/{len(clips)} — {clip.title}")
+                    _log(f"Cutting clip {i}/{len(clips)}: {clip.title}", "stage")
+                    _log(f"  {seg_label}  {clip.timestamp_label}  ratio={aspect_ratio.value}", "detail")
+
+                    clip.output_path = self._cutter.cut_clip(
+                        source_path  = path,
+                        segments     = clip.segments,
+                        index        = i,
+                        title        = clip.title,
+                        aspect_ratio = aspect_ratio,
+                    )
+                    _log(f"  → {clip.output_path}", "detail")
+                    self._on_clip_done(clip)
 
             _log(f"All {len(clips)} clip(s) exported successfully.", "success")
             self._on_success(clips)

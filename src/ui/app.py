@@ -265,6 +265,8 @@ class App:
         min_clip_duration=None,
         max_clip_duration=None,
         cuts_per_clip=None,
+        raw_cuts=False,
+        raw_cuts_padding=1.0,
     ):
         self._start_job()
         self._clips.reset()
@@ -278,6 +280,8 @@ class App:
             min_clip_duration=min_clip_duration,
             max_clip_duration=max_clip_duration,
             cuts_per_clip=cuts_per_clip,
+            raw_cuts=raw_cuts,
+            raw_cuts_padding=raw_cuts_padding,
         )
 
     def _on_clips_stage(self, text: str):

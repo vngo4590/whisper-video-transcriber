@@ -10,13 +10,16 @@ Multi-segment workflow:
     Temp files are deleted on completion.
 """
 
+import json
 import os
 import re
 import tempfile
+from datetime import datetime, timezone
+from pathlib import Path
 
 import ffmpeg
 
-from src.models import ASPECT_RATIO_SIZES, CLIP_BITRATE, CLIP_FPS, AspectRatio, Segment
+from src.models import ASPECT_RATIO_SIZES, CLIP_BITRATE, CLIP_FPS, AspectRatio, ClipResult, Segment
 
 # ---------------------------------------------------------------------------
 # SRT helpers used by burn_captions
@@ -90,6 +93,119 @@ class VideoCutter:
             self._encode_and_concat(source_path, segments, output_path, aspect_ratio)
 
         return output_path
+
+    def cut_raw_segments(
+        self,
+        source_path:    str,
+        clips:          list[ClipResult],
+        padding:        float,
+        video_duration: float,
+        aspect_ratio:   AspectRatio = AspectRatio.ORIGINAL,
+        on_progress=None,
+    ) -> str:
+        """
+        Cut each segment of every clip individually (with padding) and save
+        them into an organised folder next to the source video.
+
+        Folder layout::
+
+            <source_dir>/
+              <video_stem>/
+                metadata.json
+                clip_01_<title>/
+                  seg_01.mp4
+                  seg_02.mp4
+                clip_02_<title>/
+                  seg_01.mp4
+
+        Args:
+            source_path:    Path to the original video.
+            clips:          ClipResult list from the analyzer.
+            padding:        Seconds added to each end of every segment.
+            video_duration: Total video length (used to clamp padded end).
+            aspect_ratio:   Applied to each output segment.
+            on_progress:    Optional ``(clip_idx, seg_idx, total_segs, out_path)``
+                            callback fired after each segment is written.
+
+        Returns:
+            Absolute path to the output folder (``<source_dir>/<video_stem>/``).
+
+        Side-effect:
+            Sets ``clip.output_path`` to the clip's subfolder for every clip
+            so the UI "Open folder" button works without extra wiring.
+        """
+        video_stem = Path(source_path).stem
+        out_root   = Path(source_path).parent / _safe_filename(video_stem)
+        out_root.mkdir(exist_ok=True)
+
+        total_segs = sum(len(c.segments) for c in clips)
+
+        for clip_idx, clip in enumerate(clips, start=1):
+            clip_dir = out_root / f"clip_{clip_idx:02d}_{_safe_filename(clip.title)}"
+            clip_dir.mkdir(exist_ok=True)
+            clip.output_path = str(clip_dir)
+
+            for seg_idx, seg in enumerate(clip.segments, start=1):
+                padded = Segment(
+                    start = max(0.0, seg.start - padding),
+                    end   = min(video_duration, seg.end + padding),
+                )
+                out_path = str(clip_dir / f"seg_{seg_idx:02d}.mp4")
+                self._encode_segment(source_path, padded, out_path, aspect_ratio)
+                if on_progress:
+                    on_progress(clip_idx, seg_idx, total_segs, out_path)
+
+        self._write_metadata(out_root, source_path, clips, padding)
+        return str(out_root)
+
+    def _write_metadata(
+        self,
+        out_root:    Path,
+        source_path: str,
+        clips:       list[ClipResult],
+        padding:     float,
+    ) -> None:
+        """Write metadata.json describing all clips and their padded segments."""
+        def seg_dict(s: Segment, pad: float, dur: float) -> dict:
+            return {
+                "original_start": s.start,
+                "original_end":   s.end,
+                "padded_start":   max(0.0, s.start - pad),
+                "padded_end":     min(dur, s.end + pad),
+            }
+
+        # Infer video duration from the last segment end (already clamped upstream)
+        video_duration = max(
+            (c.segments[-1].end for c in clips if c.segments),
+            default=0.0,
+        )
+
+        payload = {
+            "generated_at":   datetime.now(timezone.utc).isoformat(),
+            "source_video":   os.path.basename(source_path),
+            "padding_seconds": padding,
+            "clips": [
+                {
+                    "index":       i,
+                    "title":       c.title,
+                    "hook":        c.hook,
+                    "reason":      c.reason,
+                    "category":    c.category,
+                    "tags":        c.tags,
+                    "description": c.description,
+                    "hashtags":    c.hashtags,
+                    "narrative":   c.narrative,
+                    "strategy":    c.strategy,
+                    "cta_hint":    c.cta_hint,
+                    "peak":        c.peak,
+                    "folder":      os.path.basename(c.output_path),
+                    "segments":    [seg_dict(s, padding, video_duration) for s in c.segments],
+                }
+                for i, c in enumerate(clips, start=1)
+            ],
+        }
+        with open(out_root / "metadata.json", "w", encoding="utf-8") as f:
+            json.dump(payload, f, indent=2, ensure_ascii=False)
 
     # ------------------------------------------------------------------
     # Private — encoding

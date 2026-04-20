@@ -14,8 +14,8 @@ from tkinter import messagebox, ttk
 
 from src.models import (
     ASPECT_RATIO_LABELS, CLIP_MODE_LABELS,
-    DEFAULT_ASPECT_RATIO,
-    DEFAULT_CLIP_MODE, DEFAULT_MAX_CLIPS,
+    DEFAULT_ASPECT_RATIO, DEFAULT_CLIP_MODE, DEFAULT_MAX_CLIPS,
+    DEFAULT_RAW_CUT_PADDING,
     AnalysisStrategy, AspectRatio, ClipMode,
 )
 import src.ui.theme as T
@@ -80,6 +80,9 @@ class VideoClipsTab:
         self._max_clip_dur_var  = tk.StringVar(value="")
         self._auto_cuts_var     = tk.BooleanVar(value=True)
         self._cuts_per_clip_var = tk.IntVar(value=3)
+        # Raw cuts output
+        self._raw_cuts_var     = tk.BooleanVar(value=False)
+        self._raw_padding_var  = tk.StringVar(value=str(DEFAULT_RAW_CUT_PADDING))
 
         self._build(parent)
 
@@ -103,6 +106,9 @@ class VideoClipsTab:
         self._auto_cuts_check.config(state=btn)
         if not self._auto_cuts_var.get():
             self._cuts_spinbox.config(state=btn)
+        self._raw_cuts_check.config(state=btn)
+        if self._raw_cuts_var.get():
+            self._raw_padding_entry.config(state=btn)
         self._instructions_text.config(state=btn)
         self._override_text.config(state=btn)
         self._clips_button.config(
@@ -238,6 +244,49 @@ class VideoClipsTab:
         # ── Shared: analysis strategies ────────────────────────────────
         self._strategy_picker = StrategyPickerWidget(parent)
 
+        # ── Raw cuts output ────────────────────────────────────────────
+        section_label(parent, "OUTPUT MODE")
+        raw_card = card(parent)
+
+        self._raw_cuts_check = tk.Checkbutton(
+            raw_card,
+            text="Raw cuts  —  save individual segments for manual editing",
+            variable=self._raw_cuts_var,
+            command=self._toggle_raw_cuts,
+            font=T.FONT_LABEL, bg=T.C_CARD, fg=T.C_TEXT_1,
+            activebackground=T.C_CARD, activeforeground=T.C_TEXT_1,
+            selectcolor=T.C_BG, relief="flat", bd=0, cursor="hand2",
+            wraplength=T.SIDEBAR_W - T.PAD_H * 2 - T.PAD_CARD * 2,
+            justify="left", anchor="w",
+        )
+        self._raw_cuts_check.pack(anchor="w")
+
+        tk.Label(
+            raw_card,
+            text=(
+                "Segments are cut individually into a folder named after the\n"
+                "source video. A metadata.json with AI descriptions is included.\n"
+                "Existing clip modes still determine what Claude selects."
+            ),
+            font=("Segoe UI", 8), bg=T.C_CARD, fg=T.C_TEXT_3,
+            justify="left", anchor="w",
+        ).pack(anchor="w", pady=(2, 8))
+
+        self._raw_padding_row = tk.Frame(raw_card, bg=T.C_CARD)
+        self._raw_padding_row.pack(fill="x")
+        tk.Label(
+            self._raw_padding_row,
+            text="Padding each end (s)",
+            font=T.FONT_LABEL, bg=T.C_CARD, fg=T.C_TEXT_2,
+        ).pack(side="left")
+        self._raw_padding_entry = tk.Entry(
+            self._raw_padding_row,
+            textvariable=self._raw_padding_var,
+            width=6, **_ENTRY_STYLE,
+        )
+        self._raw_padding_entry.pack(side="right")
+        self._raw_padding_row.pack_forget()   # hidden until checkbox is ticked
+
         # ── Custom instructions card ───────────────────────────────────
         section_label(parent, "CUSTOM INSTRUCTIONS  (optional)")
         instr_card = card(parent)
@@ -353,6 +402,12 @@ class VideoClipsTab:
             state="disabled" if self._auto_cuts_var.get() else "normal"
         )
 
+    def _toggle_raw_cuts(self) -> None:
+        if self._raw_cuts_var.get():
+            self._raw_padding_row.pack(fill="x")
+        else:
+            self._raw_padding_row.pack_forget()
+
     # ------------------------------------------------------------------
     # Private — resolve helpers
     # ------------------------------------------------------------------
@@ -401,6 +456,14 @@ class VideoClipsTab:
         except (ValueError, tk.TclError):
             return None
 
+    def _get_raw_cuts_padding(self) -> float:
+        """Parse padding entry; fall back to default if blank or invalid."""
+        try:
+            v = float(self._raw_padding_var.get().strip())
+            return max(0.0, v)
+        except ValueError:
+            return DEFAULT_RAW_CUT_PADDING
+
     def _on_clip_mode_changed(self, *_) -> None:
         if self._resolve_clip_mode() is ClipMode.HIGHLIGHTS:
             if not self._strategy_picker.any_enabled():
@@ -442,4 +505,6 @@ class VideoClipsTab:
             min_dur,
             max_dur,
             self._get_cuts_per_clip(),
+            self._raw_cuts_var.get(),
+            self._get_raw_cuts_padding(),
         )
