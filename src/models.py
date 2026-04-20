@@ -114,7 +114,10 @@ class ClipResult:
     title:     str
     hook:      str
     reason:    str
-    category:  str
+    category:  str                    # free-form AI-generated label
+    tags:      list[str] = field(default_factory=list)
+    description: str = field(default="")
+    hashtags:  list[str] = field(default_factory=list)
     narrative: str = field(default="")   # creative mode arc description
     strategy:  str = field(default="")   # reels mode influencer strategy used
     cta_hint:  str = field(default="")   # reels mode suggested caption / CTA

@@ -81,7 +81,10 @@ Return ONLY this exact JSON shape:
       "title":      "<descriptive title, max 10 words>",
       "hook":       "<what is said or shown in the first 3 seconds>",
       "reason":     "<why this moment stands alone, 1–2 sentences>",
-      "category":   "<insight | story | tutorial | humor | emotional | reveal | debate | demonstration>"
+      "category":   "<short AI-generated category label>",
+      "tags":       ["<tag1>", "<tag2>", "<tag3>"],
+      "description":"<1-sentence social caption style summary>",
+      "hashtags":   ["#tag1", "#tag2", "#tag3"]
     }}
   ]
 }}
@@ -108,7 +111,10 @@ Return ONLY this exact JSON shape:
       "title":    "<descriptive title, max 10 words>",
       "hook":     "<what happens in the very first cut>",
       "reason":   "<why this assembled reel works as a standalone piece, 1–2 sentences>",
-      "category": "<insight | story | tutorial | humor | emotional | reveal | debate | demonstration>",
+      "category": "<short AI-generated category label>",
+      "tags":     ["<tag1>", "<tag2>", "<tag3>"],
+      "description":"<1-sentence social caption style summary>",
+      "hashtags": ["#tag1", "#tag2", "#tag3"],
       "segments": [
         {{"start": <float>, "end": <float>}},
         {{"start": <float>, "end": <float>}}
@@ -144,7 +150,10 @@ Return ONLY this exact JSON shape:
       "title":     "<descriptive title, max 10 words>",
       "hook":      "<what drops in the opening cut>",
       "reason":    "<why this creative edit will resonate, 1–2 sentences>",
-      "category":  "<insight | story | tutorial | humor | emotional | reveal | debate | demonstration>",
+      "category":  "<short AI-generated category label>",
+      "tags":      ["<tag1>", "<tag2>", "<tag3>"],
+      "description":"<1-sentence social caption style summary>",
+      "hashtags":  ["#tag1", "#tag2", "#tag3"],
       "narrative": "<hook → context → payoff arc in 1–2 sentences>",
       "segments":  [
         {{"start": <float>, "end": <float>}},
@@ -197,7 +206,10 @@ Return ONLY this exact JSON shape:
       "strategy": "<one of the seven strategy keys above>",
       "reason":   "<why this will perform on short-form platforms, 1 sentence>",
       "cta_hint": "<suggested caption line or on-screen text, e.g. 'Save this! 👇'>",
-      "category": "<insight | story | tutorial | humor | emotional | reveal | debate | demonstration>",
+      "category": "<short AI-generated category label>",
+      "tags":     ["<tag1>", "<tag2>", "<tag3>"],
+      "description":"<1-sentence social caption style summary>",
+      "hashtags": ["#tag1", "#tag2", "#tag3"],
       "segments": [
         {{"start": <float>, "end": <float>}},
         {{"start": <float>, "end": <float>}}
@@ -233,7 +245,10 @@ Return ONLY this exact JSON shape:
       "hook":     "<what the viewer sees/hears in the first second>",
       "peak":     "<brief description of the peak moment — e.g. 'crowd applause', 'key result revealed', 'punchline lands', 'clutch moment'>",
       "reason":   "<why this moment will resonate with viewers, 1 sentence>",
-      "category": "<reaction | revelation | achievement | humor | emotional | instructional | performance>",
+      "category": "<short AI-generated category label>",
+      "tags":     ["<tag1>", "<tag2>", "<tag3>"],
+      "description":"<1-sentence social caption style summary>",
+      "hashtags": ["#tag1", "#tag2", "#tag3"],
       "segments": [
         {{"start": <float>, "end": <float>}},
         {{"start": <float>, "end": <float>}}

@@ -16,13 +16,16 @@ from src.clips.cutter import VideoCutter
 from src.models import ClipResult
 import src.ui.theme as T
 
-_CATEGORY_COLORS = {
-    "humor":       "#f59e0b",
-    "insight":     "#6c63ff",
-    "emotional":   "#ec4899",
-    "shocking":    "#ef4444",
-    "educational": "#10b981",
-}
+_CATEGORY_COLORS = [
+    "#f59e0b",
+    "#0ea5e9",
+    "#22c55e",
+    "#ef4444",
+    "#14b8a6",
+    "#6366f1",
+    "#ec4899",
+    "#a3a3a3",
+]
 
 
 class ClipsPanel:
@@ -141,7 +144,7 @@ class ClipsPanel:
         top = tk.Frame(card, bg=T.C_CARD)
         top.pack(fill="x", padx=12, pady=(12, 4))
 
-        category_color = _CATEGORY_COLORS.get(clip.category.lower(), T.C_ACCENT)
+        category_color = _CATEGORY_COLORS[sum(ord(c) for c in clip.category.lower()) % len(_CATEGORY_COLORS)]
         tk.Label(top, text=f" {clip.category.upper()} ",
                  font=("Segoe UI", 7, "bold"),
                  bg=category_color, fg="#ffffff").pack(side="right", padx=(4, 0))
@@ -172,6 +175,15 @@ class ClipsPanel:
                      bg=T.C_CARD, fg=T.C_TEXT_2,
                      wraplength=400, anchor="w", justify="left").pack(side="left", fill="x")
 
+        if clip.tags:
+            tags_row = tk.Frame(card, bg=T.C_CARD)
+            tags_row.pack(fill="x", padx=12, pady=(0, 4))
+            tk.Label(tags_row, text="TAGS", font=T.FONT_SECTION,
+                     bg=T.C_CARD, fg=T.C_TEXT_3).pack(side="left", padx=(0, 6))
+            tk.Label(tags_row, text=", ".join(clip.tags), font=T.FONT_SMALL,
+                     bg=T.C_CARD, fg=T.C_TEXT_2,
+                     wraplength=400, anchor="w", justify="left").pack(side="left", fill="x")
+
         if clip.strategy:
             strat_row = tk.Frame(card, bg=T.C_CARD)
             strat_row.pack(fill="x", padx=12, pady=(0, 4))
@@ -185,6 +197,24 @@ class ClipsPanel:
                      bg=T.C_CARD, fg=T.C_TEXT_2,
                      wraplength=440, anchor="w", justify="left",
                      padx=12).pack(fill="x", pady=(0, 4))
+
+        if clip.description:
+            desc_frame = tk.Frame(card, bg=T.C_BORDER, padx=10, pady=6)
+            desc_frame.pack(fill="x", padx=12, pady=(0, 8))
+            tk.Label(desc_frame, text="DESCRIPTION", font=T.FONT_SECTION,
+                     bg=T.C_BORDER, fg=T.C_TEXT_3).pack(anchor="w")
+            tk.Label(desc_frame, text=clip.description, font=T.FONT_SMALL,
+                     bg=T.C_BORDER, fg=T.C_TEXT_1,
+                     wraplength=420, anchor="w", justify="left").pack(anchor="w", pady=(2, 0))
+
+        if clip.hashtags:
+            hashtag_row = tk.Frame(card, bg=T.C_CARD)
+            hashtag_row.pack(fill="x", padx=12, pady=(0, 6))
+            tk.Label(hashtag_row, text="HASHTAGS", font=T.FONT_SECTION,
+                     bg=T.C_CARD, fg=T.C_TEXT_3).pack(side="left", padx=(0, 6))
+            tk.Label(hashtag_row, text=" ".join(clip.hashtags), font=T.FONT_SMALL,
+                     bg=T.C_CARD, fg=T.C_ACCENT,
+                     wraplength=420, anchor="w", justify="left").pack(side="left", fill="x")
 
         if clip.cta_hint:
             cta_frame = tk.Frame(card, bg=T.C_BORDER, padx=10, pady=6)

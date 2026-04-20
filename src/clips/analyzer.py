@@ -197,18 +197,46 @@ class ClipAnalyzer:
             segments = self._extract_segments(item, video_duration, clip_mode)
             if not segments:
                 continue
+            tags = self._to_string_list(item.get("tags", []))
+            hashtags = self._normalise_hashtags(self._to_string_list(item.get("hashtags", [])))
             results.append(ClipResult(
                 segments  = segments,
                 title     = str(item.get("title",     "Untitled clip")),
                 hook      = str(item.get("hook",      "")),
                 reason    = str(item.get("reason",    "")),
-                category  = str(item.get("category",  "insight")),
+                category  = str(item.get("category",  "general")).strip() or "general",
+                tags      = tags,
+                description = str(item.get("description", "")).strip(),
+                hashtags  = hashtags,
                 narrative = str(item.get("narrative", "")),
                 strategy  = str(item.get("strategy",  "")),
                 cta_hint  = str(item.get("cta_hint",  "")),
                 peak      = str(item.get("peak",      "")),
             ))
         return results
+
+    @staticmethod
+    def _to_string_list(value: Any) -> list[str]:
+        if not isinstance(value, list):
+            return []
+        cleaned: list[str] = []
+        for item in value:
+            text = str(item).strip()
+            if text:
+                cleaned.append(text)
+        return cleaned
+
+    @staticmethod
+    def _normalise_hashtags(hashtags: list[str]) -> list[str]:
+        normalised: list[str] = []
+        for tag in hashtags:
+            compact = "".join(tag.split())
+            if not compact:
+                continue
+            if not compact.startswith("#"):
+                compact = f"#{compact}"
+            normalised.append(compact)
+        return normalised
 
     def _extract_segments(
         self, item: dict, video_duration: float, clip_mode: ClipMode
