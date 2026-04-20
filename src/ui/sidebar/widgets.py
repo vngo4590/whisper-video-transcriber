@@ -17,7 +17,8 @@ def hover(widget: tk.Widget, normal: str, hot: str) -> None:
 
 def card(parent: tk.Widget) -> tk.Frame:
     """Return a styled card frame already packed into *parent*."""
-    frame = tk.Frame(parent, bg=T.C_CARD, padx=T.PAD_CARD, pady=T.PAD_CARD)
+    frame = tk.Frame(parent, bg=T.C_CARD, padx=T.PAD_CARD, 
+                     pady=T.PAD_CARD)
     frame.pack(fill="x", padx=T.PAD_H)
     return frame
 
