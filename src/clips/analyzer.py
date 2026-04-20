@@ -87,6 +87,9 @@ class ClipAnalyzer:
         custom_instructions: str = "",
         prompt_override: str = "",
         on_log=None,
+        min_clip_duration: float | None = None,
+        max_clip_duration: float | None = None,
+        cuts_per_clip: int | None = None,
     ) -> list[ClipResult]:
         """
         Send the transcript to Claude and return validated ClipResult objects.
@@ -103,6 +106,9 @@ class ClipAnalyzer:
                              Use ``{transcript}`` as a placeholder or a bare
                              ``TRANSCRIPT:`` header; the transcript is appended
                              automatically when neither is present.
+            min_clip_duration: Soft lower bound on clip length in seconds (injected into prompt).
+            max_clip_duration: Soft upper bound on clip length in seconds (injected into prompt).
+            cuts_per_clip: If set, instructs Claude to use exactly this many segments per clip.
 
         Returns:
             List of ClipResult objects sorted by first segment start time.
@@ -131,6 +137,10 @@ class ClipAnalyzer:
                 transcript=transcript,
                 editing_rules=_EDITING_RULES,
             )
+
+        constraints = self._build_constraints(min_clip_duration, max_clip_duration, cuts_per_clip)
+        if constraints:
+            user_message += f"\n\nCLIP CONSTRAINTS (these override any conflicting rules above):\n{constraints}"
 
         if custom_instructions.strip():
             user_message += (
@@ -179,6 +189,24 @@ class ClipAnalyzer:
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _build_constraints(
+        min_dur: float | None,
+        max_dur: float | None,
+        cuts_per_clip: int | None,
+    ) -> str:
+        lines: list[str] = []
+        if min_dur is not None:
+            lines.append(f"- Each clip must be AT LEAST {min_dur:.0f} seconds long.")
+        if max_dur is not None:
+            lines.append(f"- Each clip must be NO LONGER THAN {max_dur:.0f} seconds long.")
+        if cuts_per_clip is not None:
+            lines.append(
+                f"- Each clip must have EXACTLY {cuts_per_clip} segment(s). "
+                "Split or merge segments to match this count."
+            )
+        return "\n".join(lines)
 
     def _parse_json(self, raw: str) -> dict:
         cleaned = re.sub(r"```(?:json)?|```", "", raw).strip()

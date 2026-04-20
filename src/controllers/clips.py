@@ -84,6 +84,9 @@ class ClipsController:
         prompt_override:       str         = "",
         analysis_strategies:   set         = None,
         cancel_event:          threading.Event = None,
+        min_clip_duration:     float | None = None,
+        max_clip_duration:     float | None = None,
+        cuts_per_clip:         int | None   = None,
     ) -> None:
         """Start the pipeline in a daemon thread; returns immediately."""
         threading.Thread(
@@ -94,6 +97,7 @@ class ClipsController:
                 allow_cut_anywhere, min_segment_duration, prompt_override,
                 analysis_strategies or set(),
                 cancel_event or threading.Event(),
+                min_clip_duration, max_clip_duration, cuts_per_clip,
             ),
             daemon=True,
         ).start()
@@ -117,6 +121,9 @@ class ClipsController:
         prompt_override:      str,
         analysis_strategies:  set,
         cancel_event:         threading.Event,
+        min_clip_duration:    float | None,
+        max_clip_duration:    float | None,
+        cuts_per_clip:        int | None,
     ) -> None:
         def _log(msg: str, level: str = "info") -> None:
             if self._on_log:
@@ -181,6 +188,9 @@ class ClipsController:
                 custom_instructions  = custom_instructions,
                 prompt_override      = prompt_override,
                 on_log               = self._on_log,
+                min_clip_duration    = min_clip_duration,
+                max_clip_duration    = max_clip_duration,
+                cuts_per_clip        = cuts_per_clip,
             )
             _check_cancel()
 

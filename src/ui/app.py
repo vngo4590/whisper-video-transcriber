@@ -262,6 +262,9 @@ class App:
         clip_mode, aspect_ratio, custom_instructions,
         allow_cut_anywhere, min_segment_duration, prompt_override,
         analysis_strategies,
+        min_clip_duration=None,
+        max_clip_duration=None,
+        cuts_per_clip=None,
     ):
         self._start_job()
         self._clips.reset()
@@ -272,6 +275,9 @@ class App:
             allow_cut_anywhere, min_segment_duration, prompt_override,
             analysis_strategies,
             cancel_event=self._cancel_event,
+            min_clip_duration=min_clip_duration,
+            max_clip_duration=max_clip_duration,
+            cuts_per_clip=cuts_per_clip,
         )
 
     def _on_clips_stage(self, text: str):

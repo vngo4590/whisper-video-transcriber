@@ -34,6 +34,13 @@ _OVERRIDE_PLACEHOLDER = (
     "Replaces the mode template entirely — system rules still apply."
 )
 
+_ENTRY_STYLE = dict(
+    font=T.FONT_LABEL, bg=T.C_CARD, fg=T.C_TEXT_1,
+    insertbackground=T.C_TEXT_1, relief="flat",
+    highlightthickness=1, highlightbackground=T.C_BORDER,
+    highlightcolor=T.C_ACCENT,
+)
+
 
 class VideoClipsTab:
     """
@@ -47,7 +54,9 @@ class VideoClipsTab:
                            max_clips, api_key, claude_model, clip_mode,
                            aspect_ratio, custom_instructions,
                            allow_cut_anywhere, min_segment_duration,
-                           prompt_override, analysis_strategies)``.
+                           prompt_override, analysis_strategies,
+                           min_clip_duration, max_clip_duration,
+                           cuts_per_clip)``.
     """
 
     def __init__(
@@ -66,10 +75,14 @@ class VideoClipsTab:
         self._max_clips_var          = tk.IntVar(value=DEFAULT_MAX_CLIPS)
         self._min_segment_var        = tk.DoubleVar(value=0.8)
         self._allow_cut_anywhere_var = tk.BooleanVar(value=False)
+        # Clip duration / cuts constraints (all optional)
+        self._min_clip_dur_var  = tk.StringVar(value="")
+        self._max_clip_dur_var  = tk.StringVar(value="")
+        self._auto_cuts_var     = tk.BooleanVar(value=True)
+        self._cuts_per_clip_var = tk.IntVar(value=3)
 
         self._build(parent)
 
-        # Auto-check audio energy when Highlights mode is selected
         self._clip_mode_var.trace_add("write", self._on_clip_mode_changed)
 
     def submit(self) -> None:
@@ -85,6 +98,11 @@ class VideoClipsTab:
         self._cut_anywhere_check.config(state=btn)
         self._clip_mode_menu.config(state=combo)
         self._aspect_ratio_menu.config(state=combo)
+        self._min_dur_entry.config(state=btn)
+        self._max_dur_entry.config(state=btn)
+        self._auto_cuts_check.config(state=btn)
+        if not self._auto_cuts_var.get():
+            self._cuts_spinbox.config(state=btn)
         self._instructions_text.config(state=btn)
         self._override_text.config(state=btn)
         self._clips_button.config(
@@ -94,7 +112,7 @@ class VideoClipsTab:
         )
 
     # ------------------------------------------------------------------
-    # Private
+    # Private — layout
     # ------------------------------------------------------------------
 
     def _build(self, parent: tk.Widget) -> None:
@@ -161,6 +179,61 @@ class VideoClipsTab:
             selectcolor=T.C_BG, relief="flat", bd=0, cursor="hand2",
         )
         self._cut_anywhere_check.pack(anchor="w", pady=(8, 0))
+
+        # ── Clip duration + cuts constraints ──────────────────────────
+        section_label(parent, "CLIP CONSTRAINTS  (optional)")
+        dur_card = card(parent)
+
+        # Min / Max clip duration on one row
+        dur_row = tk.Frame(dur_card, bg=T.C_CARD)
+        dur_row.pack(fill="x")
+
+        tk.Label(dur_row, text="Min (s)", font=T.FONT_LABEL,
+                 bg=T.C_CARD, fg=T.C_TEXT_2).grid(row=0, column=0, sticky="w")
+        self._min_dur_entry = tk.Entry(
+            dur_row, textvariable=self._min_clip_dur_var, width=6,
+            **_ENTRY_STYLE,
+        )
+        self._min_dur_entry.grid(row=0, column=1, padx=(4, 16), sticky="w")
+
+        tk.Label(dur_row, text="Max (s)", font=T.FONT_LABEL,
+                 bg=T.C_CARD, fg=T.C_TEXT_2).grid(row=0, column=2, sticky="w")
+        self._max_dur_entry = tk.Entry(
+            dur_row, textvariable=self._max_clip_dur_var, width=6,
+            **_ENTRY_STYLE,
+        )
+        self._max_dur_entry.grid(row=0, column=3, padx=(4, 0), sticky="w")
+
+        tk.Label(dur_card,
+                 text="Leave blank to let AI choose clip length.",
+                 font=("Segoe UI", 8), bg=T.C_CARD, fg=T.C_TEXT_3,
+                 ).pack(anchor="w", pady=(4, 8))
+
+        # Cuts per clip
+        cuts_row = tk.Frame(dur_card, bg=T.C_CARD)
+        cuts_row.pack(fill="x")
+        tk.Label(cuts_row, text="Cuts per clip", font=T.FONT_LABEL,
+                 bg=T.C_CARD, fg=T.C_TEXT_2).pack(side="left")
+
+        self._auto_cuts_check = tk.Checkbutton(
+            cuts_row, text="Auto",
+            variable=self._auto_cuts_var,
+            command=self._toggle_cuts_spinbox,
+            font=T.FONT_LABEL, bg=T.C_CARD, fg=T.C_TEXT_2,
+            activebackground=T.C_CARD, activeforeground=T.C_TEXT_1,
+            selectcolor=T.C_BG, relief="flat", bd=0, cursor="hand2",
+        )
+        self._auto_cuts_check.pack(side="right")
+
+        self._cuts_spinbox = tk.Spinbox(
+            cuts_row, from_=1, to=20, textvariable=self._cuts_per_clip_var, width=4,
+            font=T.FONT_LABEL, bg=T.C_CARD, fg=T.C_TEXT_1,
+            buttonbackground=T.C_BORDER, insertbackground=T.C_TEXT_1,
+            relief="flat", highlightthickness=1,
+            highlightbackground=T.C_BORDER, highlightcolor=T.C_ACCENT,
+            state="disabled",
+        )
+        self._cuts_spinbox.pack(side="right", padx=(0, 6))
 
         # ── Shared: analysis strategies ────────────────────────────────
         self._strategy_picker = StrategyPickerWidget(parent)
@@ -275,15 +348,10 @@ class VideoClipsTab:
             self._override_text.config(fg=T.C_TEXT_3)
             self._override_placeholder_active = True
 
-    def _get_custom_instructions(self) -> str:
-        if self._instructions_placeholder_active:
-            return ""
-        return self._instructions_text.get("1.0", tk.END).strip()
-
-    def _get_prompt_override(self) -> str:
-        if self._override_placeholder_active:
-            return ""
-        return self._override_text.get("1.0", tk.END).strip()
+    def _toggle_cuts_spinbox(self) -> None:
+        self._cuts_spinbox.config(
+            state="disabled" if self._auto_cuts_var.get() else "normal"
+        )
 
     # ------------------------------------------------------------------
     # Private — resolve helpers
@@ -303,8 +371,37 @@ class VideoClipsTab:
                 return ratio
         return DEFAULT_ASPECT_RATIO
 
+    def _get_custom_instructions(self) -> str:
+        if self._instructions_placeholder_active:
+            return ""
+        return self._instructions_text.get("1.0", tk.END).strip()
+
+    def _get_prompt_override(self) -> str:
+        if self._override_placeholder_active:
+            return ""
+        return self._override_text.get("1.0", tk.END).strip()
+
+    def _get_duration(self, var: tk.StringVar) -> float | None:
+        """Parse a duration entry; return None if blank or invalid."""
+        raw = var.get().strip()
+        if not raw:
+            return None
+        try:
+            v = float(raw)
+            return v if v > 0 else None
+        except ValueError:
+            return None
+
+    def _get_cuts_per_clip(self) -> int | None:
+        """Return None when Auto is checked (let Claude decide)."""
+        if self._auto_cuts_var.get():
+            return None
+        try:
+            return max(1, int(self._cuts_per_clip_var.get()))
+        except (ValueError, tk.TclError):
+            return None
+
     def _on_clip_mode_changed(self, *_) -> None:
-        """Auto-check AUDIO_ENERGY when HIGHLIGHTS is selected and nothing is on."""
         if self._resolve_clip_mode() is ClipMode.HIGHLIGHTS:
             if not self._strategy_picker.any_enabled():
                 self._strategy_picker.set_strategy(AnalysisStrategy.AUDIO_ENERGY, True)
@@ -318,6 +415,16 @@ class VideoClipsTab:
         if not api_key:
             messagebox.showwarning("API key required", "Please enter your Anthropic API key.")
             return
+
+        min_dur = self._get_duration(self._min_clip_dur_var)
+        max_dur = self._get_duration(self._max_clip_dur_var)
+        if min_dur is not None and max_dur is not None and min_dur >= max_dur:
+            messagebox.showwarning(
+                "Invalid clip length",
+                "Min clip length must be less than Max clip length.",
+            )
+            return
+
         self._api_settings.save()
         self._on_generate_clips(
             path,
@@ -332,4 +439,7 @@ class VideoClipsTab:
             self._min_segment_var.get(),
             self._get_prompt_override(),
             self._strategy_picker.selected,
+            min_dur,
+            max_dur,
+            self._get_cuts_per_clip(),
         )
