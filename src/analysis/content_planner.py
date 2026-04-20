@@ -99,7 +99,11 @@ def generate_plan(
         if on_log:
             on_log(msg, level)
 
-    client = anthropic.Anthropic(api_key=api_key)
+    client = anthropic.Anthropic(
+        api_key=api_key,
+        max_retries=3,
+        timeout=anthropic.Timeout(600.0, connect=30.0),
+    )
 
     context_block = ""
     if context.strip():
@@ -115,12 +119,32 @@ def generate_plan(
     _log(f"→ Claude API  model={claude_model}  max_tokens=4096", "api")
     _log(f"  focus={focus!r}  max_highlights={max_highlights}  input={len(user_message):,} chars", "detail")
 
-    response = client.messages.create(
-        model=claude_model,
-        max_tokens=4096,
-        system=_SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": user_message}],
-    )
+    try:
+        response = client.messages.create(
+            model=claude_model,
+            max_tokens=4096,
+            system=_SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": user_message}],
+        )
+    except anthropic.AuthenticationError as exc:
+        raise ValueError("Invalid Anthropic API key — check the key in the settings.") from exc
+    except anthropic.RateLimitError as exc:
+        raise ValueError("Anthropic rate limit reached — wait a moment and try again.") from exc
+    except anthropic.APIConnectionError as exc:
+        raise ValueError(
+            "Could not reach the Anthropic API. Check your internet connection and try again.\n"
+            f"Detail: {exc}"
+        ) from exc
+    except anthropic.APITimeoutError as exc:
+        raise ValueError(
+            "The Anthropic API request timed out. The transcript may be too long — "
+            "try a shorter video or a faster model.\n"
+            f"Detail: {exc}"
+        ) from exc
+    except anthropic.APIStatusError as exc:
+        raise ValueError(
+            f"Anthropic API error {exc.status_code}: {exc.message}"
+        ) from exc
 
     raw = ""
     for block in response.content:
