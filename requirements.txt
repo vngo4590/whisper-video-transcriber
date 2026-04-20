@@ -1,10 +1,27 @@
-openai-whisper
-ffmpeg-python
-opencv-python
-pillow
-anthropic
-numpy
-easyocr
-tkinterdnd2
-# Optional — speaker diarization (requires HF token for pyannote/speaker-diarization-3.1)
+# Core AI / transcription
+openai-whisper>=20250625
+anthropic>=0.91.0
+
+# Video / audio processing
+ffmpeg-python>=0.2.0
+opencv-python>=4.13.0.92
+
+# Image processing
+Pillow>=12.1.0
+
+# Numerical computing (required by whisper, easyocr, opencv)
+numpy>=2.3.5
+
+# OCR — on-screen text extraction
+easyocr>=1.7.2
+
+# Drag-and-drop file support for tkinter
+tkinterdnd2>=0.4.3
+
+# Deep learning backend (required by whisper and easyocr)
+torch>=2.11.0
+torchvision>=0.26.0
+
+# Optional — speaker diarization (requires a Hugging Face token and
+# access to the gated pyannote/speaker-diarization-3.1 model)
 # pip install pyannote.audio
