@@ -14,7 +14,8 @@
       "Bash(.venv\\\\Scripts\\\\python *)",
       "Bash(.venv/Scripts/python *)",
       "Bash(.venv/Scripts/pip show *)",
-      "Bash(.venv/Scripts/pip install *)"
+      "Bash(.venv/Scripts/pip install *)",
+      "Bash(.venv/Scripts/pip list *)"
     ]
   }
 }

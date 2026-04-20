@@ -64,9 +64,8 @@ class TranscribeTab:
         self._translate_checkbox.config(state=btn)
         self._onscreen_checkbox.config(state=btn)
         self._ocr_langs_entry.config(state=btn)
-        if _DIARIZATION_AVAILABLE:
-            self._diarize_checkbox.config(state=btn)
-            self._hf_token_entry.config(state=btn)
+        self._diarize_checkbox.config(state=btn)
+        self._hf_token_entry.config(state=btn)
         self._confirm_button.config(
             state=btn,
             bg=T.C_ACCENT_D if busy else T.C_ACCENT,
@@ -145,25 +144,18 @@ class TranscribeTab:
             font=("Segoe UI", 8), bg=T.C_CARD, fg=T.C_TEXT_2,
         ).pack(anchor="w")
 
-        # Speaker labels (diarization) — disabled when pyannote not installed
-        diarize_text = (
-            "Speaker labels  (diarization)"
-            if _DIARIZATION_AVAILABLE
-            else "Speaker labels  (install pyannote.audio)"
-        )
         self._diarize_checkbox = tk.Checkbutton(
             opt_card,
-            text=diarize_text,
+            text="Speaker labels  (diarization)",
             variable=self._diarize_var,
             font=T.FONT_LABEL,
             bg=T.C_CARD,
-            fg=T.C_TEXT_1 if _DIARIZATION_AVAILABLE else T.C_TEXT_3,
+            fg=T.C_TEXT_1,
             activebackground=T.C_CARD,
             activeforeground=T.C_TEXT_1,
             selectcolor=T.C_ACCENT,
             relief="flat", bd=0,
-            cursor="hand2" if _DIARIZATION_AVAILABLE else "arrow",
-            state="normal" if _DIARIZATION_AVAILABLE else "disabled",
+            cursor="hand2",
             command=self._toggle_hf_token,
         )
         self._diarize_checkbox.pack(anchor="w", pady=(4, 0))
@@ -228,8 +220,14 @@ class TranscribeTab:
         if not path:
             messagebox.showwarning("No file selected", "Please select a file first.")
             return
-        diarize   = _DIARIZATION_AVAILABLE and self._diarize_var.get()
-        hf_token  = self._hf_token_var.get().strip()
+        diarize  = self._diarize_var.get()
+        hf_token = self._hf_token_var.get().strip()
+        if diarize and not _DIARIZATION_AVAILABLE:
+            messagebox.showwarning(
+                "pyannote.audio not installed",
+                "Speaker diarization requires pyannote.audio.\n\nInstall it with:\n  pip install pyannote.audio",
+            )
+            return
         if diarize and not hf_token:
             messagebox.showwarning(
                 "HF token required",
