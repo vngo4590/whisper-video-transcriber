@@ -4,7 +4,7 @@ clips/analyzer.py — Claude API integration for viral moment detection.
 SRP: Only responsible for sending the transcript to Claude and returning
      a list of ClipResult objects. No ffmpeg, no UI, no file I/O.
 
-Prompts are loaded from prompts/clip_prompts.md — edit that file to tune
+Prompts are loaded from prompts/clips/ — edit those files to tune
 Claude's behaviour without touching this code.
 """
 
@@ -22,41 +22,20 @@ from src.models import ClipMode, ClipResult, Segment, DEFAULT_CLAUDE_MODEL
 # Prompt loader
 # ---------------------------------------------------------------------------
 
-def _load_prompts() -> dict[str, str]:
-    """Parse prompts/clip_prompts.md and return a dict keyed by ## heading."""
-    md_path = Path(__file__).parent.parent.parent / "prompts" / "clip_prompts.md"
-    text = md_path.read_text(encoding="utf-8")
-
-    sections: dict[str, str] = {}
-    current_key: str | None = None
-    current_lines: list[str] = []
-
-    for line in text.splitlines():
-        if line.startswith("## "):
-            if current_key is not None:
-                sections[current_key] = "\n".join(current_lines).strip()
-            current_key = line[3:].strip()
-            current_lines = []
-        elif current_key is not None:
-            current_lines.append(line)
-
-    if current_key is not None:
-        sections[current_key] = "\n".join(current_lines).strip()
-
-    return sections
+def _p(name: str) -> str:
+    """Read a single prompt file from prompts/clips/."""
+    return (Path(__file__).parent.parent.parent / "prompts" / "clips" / name).read_text(encoding="utf-8").strip()
 
 
-_PROMPTS = _load_prompts()
-
-_SYSTEM_PROMPT   = _PROMPTS["SYSTEM_PROMPT"]
-_EDITING_RULES   = "\n" + _PROMPTS["EDITING_RULES"] + "\n"
+_SYSTEM_PROMPT = _p("system.md")
+_EDITING_RULES = "\n" + _p("editing_rules.md") + "\n"
 
 _TEMPLATES: dict[ClipMode, str] = {
-    ClipMode.SINGLE_SHOT: _PROMPTS["SINGLE_SHOT_TEMPLATE"],
-    ClipMode.MULTI_CUT:   _PROMPTS["MULTI_CUT_TEMPLATE"],
-    ClipMode.CREATIVE:    _PROMPTS["CREATIVE_TEMPLATE"],
-    ClipMode.REELS:       _PROMPTS["REELS_TEMPLATE"],
-    ClipMode.HIGHLIGHTS:  _PROMPTS["HIGHLIGHTS_TEMPLATE"],
+    ClipMode.SINGLE_SHOT: _p("single_shot.md"),
+    ClipMode.MULTI_CUT:   _p("multi_cut.md"),
+    ClipMode.CREATIVE:    _p("creative.md"),
+    ClipMode.REELS:       _p("reels.md"),
+    ClipMode.HIGHLIGHTS:  _p("highlights.md"),
 }
 
 

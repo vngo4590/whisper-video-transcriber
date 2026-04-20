@@ -5,7 +5,8 @@ SRP: Sole responsibility is sending a transcript to Claude and returning
      a list of chapter dicts with timestamps, titles, summaries, and key
      points.  No UI, no ffmpeg, no file I/O.
 
-Prompts are loaded from prompts/chapter_prompts.md.
+Prompts are loaded from prompts/chapters/ — edit those files to tune
+Claude's behaviour without touching this code.
 """
 
 import json
@@ -21,28 +22,13 @@ from src.models import DEFAULT_CLAUDE_MODEL
 # Prompt loader
 # ---------------------------------------------------------------------------
 
-def _load_prompts() -> dict[str, str]:
-    md_path = Path(__file__).parent.parent.parent / "prompts" / "chapter_prompts.md"
-    text = md_path.read_text(encoding="utf-8")
-    sections: dict[str, str] = {}
-    current_key: str | None = None
-    current_lines: list[str] = []
-    for line in text.splitlines():
-        if line.startswith("## "):
-            if current_key is not None:
-                sections[current_key] = "\n".join(current_lines).strip()
-            current_key = line[3:].strip()
-            current_lines = []
-        elif current_key is not None:
-            current_lines.append(line)
-    if current_key is not None:
-        sections[current_key] = "\n".join(current_lines).strip()
-    return sections
+def _p(name: str) -> str:
+    """Read a single prompt file from prompts/chapters/."""
+    return (Path(__file__).parent.parent.parent / "prompts" / "chapters" / name).read_text(encoding="utf-8").strip()
 
 
-_PROMPTS = _load_prompts()
-_SYSTEM_PROMPT = _PROMPTS["SYSTEM_PROMPT"]
-_USER_TEMPLATE = _PROMPTS["USER_TEMPLATE"]
+_SYSTEM_PROMPT = _p("system.md")
+_USER_TEMPLATE = _p("user_template.md")
 
 
 # ---------------------------------------------------------------------------

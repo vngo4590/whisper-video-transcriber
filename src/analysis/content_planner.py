@@ -5,7 +5,7 @@ SRP: Responsible for sending a timestamped transcript to Claude and returning
      a formatted, human-readable content plan string.  No ffmpeg, no UI, no
      file I/O.
 
-Prompts are loaded from prompts/content_plan_prompts.md — edit that file to tune
+Prompts are loaded from prompts/content_plan/ — edit those files to tune
 Claude's behaviour without touching this code.
 """
 
@@ -37,35 +37,16 @@ FOCUS_OPTIONS: list[str] = [
 
 
 # ---------------------------------------------------------------------------
-# Prompt loader (same pattern as clips/analyzer.py)
+# Prompt loader
 # ---------------------------------------------------------------------------
 
-def _load_prompts() -> dict[str, str]:
-    md_path = Path(__file__).parent.parent.parent / "prompts" / "content_plan_prompts.md"
-    text = md_path.read_text(encoding="utf-8")
-
-    sections: dict[str, str] = {}
-    current_key: str | None = None
-    current_lines: list[str] = []
-
-    for line in text.splitlines():
-        if line.startswith("## "):
-            if current_key is not None:
-                sections[current_key] = "\n".join(current_lines).strip()
-            current_key = line[3:].strip()
-            current_lines = []
-        elif current_key is not None:
-            current_lines.append(line)
-
-    if current_key is not None:
-        sections[current_key] = "\n".join(current_lines).strip()
-
-    return sections
+def _p(name: str) -> str:
+    """Read a single prompt file from prompts/content_plan/."""
+    return (Path(__file__).parent.parent.parent / "prompts" / "content_plan" / name).read_text(encoding="utf-8").strip()
 
 
-_PROMPTS = _load_prompts()
-_SYSTEM_PROMPT = _PROMPTS["SYSTEM_PROMPT"]
-_USER_TEMPLATE = _PROMPTS["USER_TEMPLATE"]
+_SYSTEM_PROMPT = _p("system.md")
+_USER_TEMPLATE = _p("user_template.md")
 
 
 # ---------------------------------------------------------------------------
