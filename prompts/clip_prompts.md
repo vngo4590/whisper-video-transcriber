@@ -58,6 +58,8 @@ OUTPUT QUALITY RULES (all modes):
 
 Your output must be ONLY a single valid JSON object — no markdown fences, no explanation, no extra keys. Any deviation will break the pipeline.
 
+CRITICAL: Even if the transcript is too short, too fragmented, or has no strong moments, you MUST still return valid JSON in this exact shape: {"clips": []}. NEVER write prose, apologies, or analysis outside the JSON object. If you cannot find any clips, return {"clips": []} and nothing else.
+
 ---
 
 ## EDITING_RULES

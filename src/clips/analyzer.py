@@ -180,9 +180,10 @@ class ClipAnalyzer:
 
         raw = self._extract_text_response(response.content)
         _log(f"← Claude responded  ({len(raw):,} chars)", "detail")
+        print(f"[ClipAnalyzer] raw Claude response ({len(raw):,} chars):\n{raw}\n{'─'*60}")
         if not raw:
             raise ValueError("Claude returned no text content.")
-        data = self._parse_json(raw)
+        data = self._parse_json(raw, _log)
         clips = self._validate_clips(data.get("clips", []), video_duration, clip_mode)
         return sorted(clips, key=lambda c: c.start)
 
@@ -208,13 +209,30 @@ class ClipAnalyzer:
             )
         return "\n".join(lines)
 
-    def _parse_json(self, raw: str) -> dict:
+    def _parse_json(self, raw: str, _log=None) -> dict:
         cleaned = re.sub(r"```(?:json)?|```", "", raw).strip()
         try:
             return json.loads(cleaned)
         except json.JSONDecodeError as exc:
+            # Full response always goes to stdout for debugging
+            print(
+                f"[ClipAnalyzer] JSON parse failed — full response:\n{raw}\n"
+                f"Error: {exc}\n{'─'*60}"
+            )
+            if _log:
+                _log(f"JSON parse error: {exc}  (full response printed to terminal)", "error")
+            # If Claude returned a plain-text explanation instead of JSON,
+            # surface that explanation rather than a raw parse traceback.
+            if not cleaned.startswith("{") and not cleaned.startswith("["):
+                raise ValueError(
+                    "Claude could not find suitable clips and explained why:\n\n"
+                    + cleaned[:800]
+                    + ("\n…(truncated)" if len(cleaned) > 800 else "")
+                ) from exc
             raise ValueError(
-                f"Claude returned invalid JSON.\nResponse: {raw[:500]}\nError: {exc}"
+                f"Claude returned invalid JSON.\n"
+                f"Full response printed to terminal.\n"
+                f"Error: {exc}"
             ) from exc
 
     def _validate_clips(
