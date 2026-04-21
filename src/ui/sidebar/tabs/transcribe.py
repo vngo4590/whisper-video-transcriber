@@ -11,6 +11,7 @@ GRASP Information Expert: sole authority on export format, word limit, and
 import tkinter as tk
 from tkinter import messagebox, ttk
 
+from src.config import settings
 from src.models import DEFAULT_EXPORT_FORMAT, DEFAULT_MAX_WORDS_PER_LINE, ExportFormat
 from src.transcription.diarizer import is_available as _diarization_available
 import src.ui.theme as T
@@ -43,15 +44,20 @@ class TranscribeTab:
         self._model_var = model_var
         self._on_transcribe = on_transcribe
 
-        self._export_format_var  = tk.StringVar(value=DEFAULT_EXPORT_FORMAT.value)
-        self._max_words_var      = tk.IntVar(value=DEFAULT_MAX_WORDS_PER_LINE)
-        self._translate_var      = tk.BooleanVar(value=False)
-        self._onscreen_var       = tk.BooleanVar(value=False)
-        self._ocr_langs_var      = tk.StringVar(value="en")
-        self._diarize_var        = tk.BooleanVar(value=False)
-        self._hf_token_var       = tk.StringVar(value="")
+        self._export_format_var  = tk.StringVar(value=settings.get("transcribe_export_format", DEFAULT_EXPORT_FORMAT.value))
+        self._max_words_var      = tk.IntVar(value=settings.get("transcribe_max_words", DEFAULT_MAX_WORDS_PER_LINE))
+        self._translate_var      = tk.BooleanVar(value=settings.get("transcribe_translate", False))
+        self._onscreen_var       = tk.BooleanVar(value=settings.get("transcribe_onscreen", False))
+        self._ocr_langs_var      = tk.StringVar(value=settings.get("transcribe_ocr_langs", "en"))
+        self._diarize_var        = tk.BooleanVar(value=settings.get("transcribe_diarize", False))
+        self._hf_token_var       = tk.StringVar(value=settings.get("hf_token", ""))
 
         self._build(parent)
+
+        if self._onscreen_var.get():
+            self._toggle_ocr_langs()
+        if self._diarize_var.get():
+            self._toggle_hf_token()
 
     def submit(self) -> None:
         self._handle_submit()
@@ -234,6 +240,15 @@ class TranscribeTab:
                 "Enter your Hugging Face access token to use speaker diarization.",
             )
             return
+        settings.save(
+            transcribe_export_format=self._export_format_var.get(),
+            transcribe_max_words=self._max_words_var.get(),
+            transcribe_translate=self._translate_var.get(),
+            transcribe_onscreen=self._onscreen_var.get(),
+            transcribe_ocr_langs=self._ocr_langs_var.get(),
+            transcribe_diarize=diarize,
+            hf_token=hf_token,
+        )
         self._on_transcribe(
             path,
             self._model_var.get(),

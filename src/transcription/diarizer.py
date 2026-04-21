@@ -72,6 +72,29 @@ class SpeakerDiarizer:
                 on_log(msg, level)
 
         try:
+            import torchaudio
+            # torchaudio 2.x removed list_audio_backends; pyannote.audio 3.x still calls it
+            if not hasattr(torchaudio, "list_audio_backends"):
+                torchaudio.list_audio_backends = lambda: ["soundfile"]
+        except ImportError as exc:
+            raise ImportError(
+                "Speaker diarization requires torchaudio.\n"
+                "Install it with: pip install torchaudio"
+            ) from exc
+
+        import huggingface_hub as _hf
+        for _fn_name in ("hf_hub_download", "snapshot_download"):
+            _fn = getattr(_hf, _fn_name, None)
+            if _fn and "use_auth_token" not in _fn.__code__.co_varnames:
+                def _make_patched(original):
+                    def _patched(*args, **kwargs):
+                        if "use_auth_token" in kwargs:
+                            kwargs.setdefault("token", kwargs.pop("use_auth_token"))
+                        return original(*args, **kwargs)
+                    return _patched
+                setattr(_hf, _fn_name, _make_patched(_fn))
+
+        try:
             from pyannote.audio import Pipeline
         except ImportError as exc:
             raise ImportError(
@@ -82,8 +105,12 @@ class SpeakerDiarizer:
         _log(f"Loading diarization model ({self._MODEL})…", "detail")
         pipeline = Pipeline.from_pretrained(self._MODEL, use_auth_token=hf_token)
 
+        _log("Loading audio…", "detail")
+        waveform, sample_rate = torchaudio.load(path)
+        audio = {"waveform": waveform, "sample_rate": sample_rate}
+
         _log("Running speaker diarization…", "detail")
-        diarization = pipeline(path)
+        diarization = pipeline(audio)
 
         segments: list[DiarizationSegment] = []
         for turn, _, speaker in diarization.itertracks(yield_label=True):

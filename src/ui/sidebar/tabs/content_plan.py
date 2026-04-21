@@ -13,6 +13,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from src.analysis.content_planner import FOCUS_OPTIONS
+from src.config import settings
 import src.ui.theme as T
 from src.ui.sidebar.widgets import card, hover, section_label
 from src.ui.shared.api_settings import ApiSettingsWidget
@@ -48,8 +49,8 @@ class ContentPlanTab:
         self._model_var        = model_var
         self._on_generate_plan = on_generate_plan
 
-        self._focus_var          = tk.StringVar(value=FOCUS_OPTIONS[0])
-        self._max_highlights_var = tk.IntVar(value=5)
+        self._focus_var          = tk.StringVar(value=settings.get("plan_focus", FOCUS_OPTIONS[0]))
+        self._max_highlights_var = tk.IntVar(value=settings.get("plan_max_highlights", 5))
         self._context_placeholder_active = True
 
         self._build(parent)
@@ -193,6 +194,10 @@ class ContentPlanTab:
             messagebox.showwarning("API key required", "Please enter your Anthropic API key.")
             return
         self._api_settings.save()
+        settings.save(
+            plan_focus=self._focus_var.get(),
+            plan_max_highlights=self._max_highlights_var.get(),
+        )
         self._on_generate_plan(
             path,
             self._model_var.get(),

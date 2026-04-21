@@ -1,6 +1,7 @@
 # Core AI / transcription
 openai-whisper>=20250625
 anthropic>=0.91.0
+pyannote.audio>=3.3.2,<4.0.0
 
 # Video / audio processing
 ffmpeg-python>=0.2.0
@@ -21,6 +22,7 @@ tkinterdnd2>=0.4.3
 # Deep learning backend (required by whisper and easyocr)
 torch>=2.11.0
 torchvision>=0.26.0
+torchaudio
 
 # Optional — speaker diarization (requires a Hugging Face token and
 # access to the gated pyannote/speaker-diarization-3.1 model)

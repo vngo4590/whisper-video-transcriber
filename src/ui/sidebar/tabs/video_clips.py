@@ -12,6 +12,7 @@ GRASP Information Expert: sole authority on clip parameters. Reads shared
 import tkinter as tk
 from tkinter import messagebox, ttk
 
+from src.config import settings
 from src.models import (
     ASPECT_RATIO_LABELS, CLIP_MODE_LABELS,
     DEFAULT_ASPECT_RATIO, DEFAULT_CLIP_MODE, DEFAULT_MAX_CLIPS,
@@ -70,23 +71,28 @@ class VideoClipsTab:
         self._model_var         = model_var
         self._on_generate_clips = on_generate_clips
 
-        self._clip_mode_var          = tk.StringVar(value=CLIP_MODE_LABELS[DEFAULT_CLIP_MODE])
-        self._aspect_ratio_var       = tk.StringVar(value=ASPECT_RATIO_LABELS[DEFAULT_ASPECT_RATIO])
-        self._max_clips_var          = tk.IntVar(value=DEFAULT_MAX_CLIPS)
-        self._min_segment_var        = tk.DoubleVar(value=0.8)
-        self._allow_cut_anywhere_var = tk.BooleanVar(value=False)
+        self._clip_mode_var          = tk.StringVar(value=settings.get("clips_clip_mode", CLIP_MODE_LABELS[DEFAULT_CLIP_MODE]))
+        self._aspect_ratio_var       = tk.StringVar(value=settings.get("clips_aspect_ratio", ASPECT_RATIO_LABELS[DEFAULT_ASPECT_RATIO]))
+        self._max_clips_var          = tk.IntVar(value=settings.get("clips_max_clips", DEFAULT_MAX_CLIPS))
+        self._min_segment_var        = tk.DoubleVar(value=settings.get("clips_min_segment", 0.8))
+        self._allow_cut_anywhere_var = tk.BooleanVar(value=settings.get("clips_allow_cut_anywhere", False))
         # Clip duration / cuts constraints (all optional)
-        self._min_clip_dur_var  = tk.StringVar(value="")
-        self._max_clip_dur_var  = tk.StringVar(value="")
-        self._auto_cuts_var     = tk.BooleanVar(value=True)
-        self._cuts_per_clip_var = tk.IntVar(value=3)
+        self._min_clip_dur_var  = tk.StringVar(value=settings.get("clips_min_clip_duration", ""))
+        self._max_clip_dur_var  = tk.StringVar(value=settings.get("clips_max_clip_duration", ""))
+        self._auto_cuts_var     = tk.BooleanVar(value=settings.get("clips_auto_cuts", True))
+        self._cuts_per_clip_var = tk.IntVar(value=settings.get("clips_per_clip", 3))
         # Raw cuts output
-        self._raw_cuts_var     = tk.BooleanVar(value=False)
-        self._raw_padding_var  = tk.StringVar(value=str(DEFAULT_RAW_CUT_PADDING))
+        self._raw_cuts_var     = tk.BooleanVar(value=settings.get("clips_raw_cuts", False))
+        self._raw_padding_var  = tk.StringVar(value=settings.get("clips_raw_padding", str(DEFAULT_RAW_CUT_PADDING)))
 
         self._build(parent)
 
         self._clip_mode_var.trace_add("write", self._on_clip_mode_changed)
+
+        if not self._auto_cuts_var.get():
+            self._toggle_cuts_spinbox()
+        if self._raw_cuts_var.get():
+            self._toggle_raw_cuts()
 
     def submit(self) -> None:
         self._handle_submit()
@@ -489,6 +495,19 @@ class VideoClipsTab:
             return
 
         self._api_settings.save()
+        settings.save(
+            clips_clip_mode=self._clip_mode_var.get(),
+            clips_aspect_ratio=self._aspect_ratio_var.get(),
+            clips_max_clips=self._max_clips_var.get(),
+            clips_min_segment=self._min_segment_var.get(),
+            clips_allow_cut_anywhere=self._allow_cut_anywhere_var.get(),
+            clips_min_clip_duration=self._min_clip_dur_var.get(),
+            clips_max_clip_duration=self._max_clip_dur_var.get(),
+            clips_auto_cuts=self._auto_cuts_var.get(),
+            clips_per_clip=self._cuts_per_clip_var.get(),
+            clips_raw_cuts=self._raw_cuts_var.get(),
+            clips_raw_padding=self._raw_padding_var.get(),
+        )
         self._on_generate_clips(
             path,
             self._model_var.get(),
