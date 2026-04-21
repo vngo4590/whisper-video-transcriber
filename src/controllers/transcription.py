@@ -71,7 +71,7 @@ class TranscriptionController:
         extract_onscreen: bool = False,
         ocr_languages: list[str] | None = None,
         diarize: bool = False,
-        hf_token: str = "",
+        num_speakers: int = 0,
         cancel_event: threading.Event = None,
     ) -> None:
         """
@@ -88,7 +88,7 @@ class TranscriptionController:
             extract_onscreen:  Run OCR and interleave on-screen text.
             ocr_languages:     EasyOCR language codes (only used when extract_onscreen=True).
             diarize:           Run speaker diarization and label each segment.
-            hf_token:          Hugging Face token (required when diarize=True).
+            num_speakers:      Hint for expected speaker count. 0 = auto-detect.
             cancel_event:      Set this event to request cancellation.
         """
         self._on_start()
@@ -97,7 +97,7 @@ class TranscriptionController:
             args=(
                 path, model_name, export_format, do_translate,
                 max_words_per_line, extract_onscreen, ocr_languages,
-                diarize, hf_token,
+                diarize, num_speakers,
                 cancel_event or threading.Event(),
             ),
             daemon=True,
@@ -129,13 +129,13 @@ class TranscriptionController:
         extract_onscreen: bool,
         ocr_languages: list[str] | None,
         diarize: bool,
-        hf_token: str,
+        num_speakers: int,
         cancel_event: threading.Event,
     ) -> None:
         try:
             filename = os.path.basename(path)
 
-            total = 2 + int(extract_onscreen) + int(diarize and bool(hf_token))
+            total = 2 + int(extract_onscreen) + int(diarize)
             step  = 0
 
             # ── Stage 1: Transcribe with Whisper ──────────────────────
@@ -145,15 +145,14 @@ class TranscriptionController:
             self._log(f"  model={model_name}  format={export_format.value}  translate={do_translate}", "detail")
             if extract_onscreen and ocr_languages:
                 self._log(f"  OCR languages: {ocr_languages}", "detail")
-            if diarize and hf_token:
-                self._log("  Speaker diarization: enabled", "detail")
+            if diarize:
+                hint = f"  num_speakers={'auto' if not num_speakers else num_speakers}"
+                self._log(f"  Speaker diarization: enabled{hint}", "detail")
 
-            # Build the on_diarize_stage callback so the service can trigger
-            # the sidebar label update at the right moment.
             diarize_step = step + 1
             on_diarize_stage = (
                 (lambda: self._stage(f"Step {diarize_step}/{total} — Identifying speakers…"))
-                if (diarize and hf_token) else None
+                if diarize else None
             )
 
             text = self._svc.transcribe(
@@ -161,7 +160,7 @@ class TranscriptionController:
                 extract_onscreen=extract_onscreen,
                 ocr_languages=ocr_languages,
                 diarize=diarize,
-                hf_token=hf_token,
+                num_speakers=num_speakers,
                 on_diarize_stage=on_diarize_stage,
                 on_log=self._on_log,
             )

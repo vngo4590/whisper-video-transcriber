@@ -50,14 +50,14 @@ class TranscribeTab:
         self._onscreen_var       = tk.BooleanVar(value=settings.get("transcribe_onscreen", False))
         self._ocr_langs_var      = tk.StringVar(value=settings.get("transcribe_ocr_langs", "en"))
         self._diarize_var        = tk.BooleanVar(value=settings.get("transcribe_diarize", False))
-        self._hf_token_var       = tk.StringVar(value=settings.get("hf_token", ""))
+        self._num_speakers_var   = tk.IntVar(value=settings.get("transcribe_num_speakers", 0))
 
         self._build(parent)
 
         if self._onscreen_var.get():
             self._toggle_ocr_langs()
         if self._diarize_var.get():
-            self._toggle_hf_token()
+            self._toggle_diarize_opts()
 
     def submit(self) -> None:
         self._handle_submit()
@@ -71,7 +71,7 @@ class TranscribeTab:
         self._onscreen_checkbox.config(state=btn)
         self._ocr_langs_entry.config(state=btn)
         self._diarize_checkbox.config(state=btn)
-        self._hf_token_entry.config(state=btn)
+        self._num_speakers_spinbox.config(state=btn)
         self._confirm_button.config(
             state=btn,
             bg=T.C_ACCENT_D if busy else T.C_ACCENT,
@@ -162,35 +162,33 @@ class TranscribeTab:
             selectcolor=T.C_ACCENT,
             relief="flat", bd=0,
             cursor="hand2",
-            command=self._toggle_hf_token,
+            command=self._toggle_diarize_opts,
         )
         self._diarize_checkbox.pack(anchor="w", pady=(4, 0))
 
-        # HF token entry — shown only when diarize is enabled
-        self._hf_token_frame = tk.Frame(opt_card, bg=T.C_CARD)
+        # Speaker count hint — shown only when diarize is enabled
+        self._diarize_opts_frame = tk.Frame(opt_card, bg=T.C_CARD)
 
+        spk_row = tk.Frame(self._diarize_opts_frame, bg=T.C_CARD)
+        spk_row.pack(fill="x", pady=(6, 0))
         tk.Label(
-            self._hf_token_frame, text="Hugging Face token",
+            spk_row, text="Number of speakers",
             font=T.FONT_LABEL, bg=T.C_CARD, fg=T.C_TEXT_2,
-        ).pack(anchor="w", pady=(6, 1))
-
-        self._hf_token_entry = tk.Entry(
-            self._hf_token_frame, textvariable=self._hf_token_var,
-            show="*",
+        ).pack(side="left")
+        self._num_speakers_spinbox = tk.Spinbox(
+            spk_row, from_=0, to=10, textvariable=self._num_speakers_var, width=4,
             font=T.FONT_LABEL, bg=T.C_CARD, fg=T.C_TEXT_1,
-            insertbackground=T.C_TEXT_1, relief="flat",
-            highlightthickness=1, highlightbackground=T.C_BORDER,
-            highlightcolor=T.C_ACCENT,
+            buttonbackground=T.C_BORDER, insertbackground=T.C_TEXT_1,
+            relief="flat", highlightthickness=1,
+            highlightbackground=T.C_BORDER, highlightcolor=T.C_ACCENT,
         )
-        self._hf_token_entry.pack(fill="x", pady=(0, 2))
+        self._num_speakers_spinbox.pack(side="right")
 
         tk.Label(
-            self._hf_token_frame,
-            text="Requires access to pyannote/speaker-diarization-3.1",
+            self._diarize_opts_frame,
+            text="0 = auto-detect",
             font=("Segoe UI", 8), bg=T.C_CARD, fg=T.C_TEXT_2,
-            wraplength=T.SIDEBAR_W - T.PAD_H * 2 - T.PAD_CARD * 2 - 20,
-            justify="left",
-        ).pack(anchor="w")
+        ).pack(anchor="w", pady=(2, 0))
 
         # Transcribe button
         btn_frame = tk.Frame(parent, bg=T.C_SIDEBAR)
@@ -210,11 +208,11 @@ class TranscribeTab:
         else:
             self._ocr_langs_frame.pack_forget()
 
-    def _toggle_hf_token(self) -> None:
+    def _toggle_diarize_opts(self) -> None:
         if self._diarize_var.get():
-            self._hf_token_frame.pack(fill="x", padx=(20, 0), pady=(0, 4))
+            self._diarize_opts_frame.pack(fill="x", padx=(20, 0), pady=(0, 4))
         else:
-            self._hf_token_frame.pack_forget()
+            self._diarize_opts_frame.pack_forget()
 
     def _parse_ocr_languages(self) -> list[str]:
         raw = self._ocr_langs_var.get()
@@ -226,18 +224,13 @@ class TranscribeTab:
         if not path:
             messagebox.showwarning("No file selected", "Please select a file first.")
             return
-        diarize  = self._diarize_var.get()
-        hf_token = self._hf_token_var.get().strip()
+        diarize      = self._diarize_var.get()
+        num_speakers = self._num_speakers_var.get()
         if diarize and not _DIARIZATION_AVAILABLE:
             messagebox.showwarning(
-                "pyannote.audio not installed",
-                "Speaker diarization requires pyannote.audio.\n\nInstall it with:\n  pip install pyannote.audio",
-            )
-            return
-        if diarize and not hf_token:
-            messagebox.showwarning(
-                "HF token required",
-                "Enter your Hugging Face access token to use speaker diarization.",
+                "Dependencies missing",
+                "Speaker diarization requires torchaudio and scipy.\n\n"
+                "Install them with:\n  pip install torchaudio scipy",
             )
             return
         settings.save(
@@ -247,7 +240,7 @@ class TranscribeTab:
             transcribe_onscreen=self._onscreen_var.get(),
             transcribe_ocr_langs=self._ocr_langs_var.get(),
             transcribe_diarize=diarize,
-            hf_token=hf_token,
+            transcribe_num_speakers=num_speakers,
         )
         self._on_transcribe(
             path,
@@ -258,5 +251,5 @@ class TranscribeTab:
             self._onscreen_var.get(),
             self._parse_ocr_languages(),
             diarize,
-            hf_token,
+            num_speakers,
         )

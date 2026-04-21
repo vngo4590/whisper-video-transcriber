@@ -1,7 +1,6 @@
 # Core AI / transcription
 openai-whisper>=20250625
 anthropic>=0.91.0
-pyannote.audio>=3.3.2,<4.0.0
 
 # Video / audio processing
 ffmpeg-python>=0.2.0
@@ -12,6 +11,7 @@ Pillow>=12.1.0
 
 # Numerical computing (required by whisper, easyocr, opencv)
 numpy>=2.3.5
+scipy>=1.10.0
 
 # OCR — on-screen text extraction
 easyocr>=1.7.2
@@ -23,6 +23,7 @@ tkinterdnd2>=0.4.3
 torch>=2.11.0
 torchvision>=0.26.0
 torchaudio
+torchcodec>=0.11.1
 
 # Optional — speaker diarization (requires a Hugging Face token and
 # access to the gated pyannote/speaker-diarization-3.1 model)

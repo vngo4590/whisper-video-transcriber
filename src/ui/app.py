@@ -228,7 +228,7 @@ class App:
 
     def _on_transcribe_requested(
         self, path, model_name, export_format, do_translate, max_words_per_line,
-        extract_onscreen=False, ocr_languages=None, diarize=False, hf_token="",
+        extract_onscreen=False, ocr_languages=None, diarize=False, num_speakers=0,
     ):
         self._current_source_path = path
         self._start_job()
@@ -237,7 +237,7 @@ class App:
             extract_onscreen=extract_onscreen,
             ocr_languages=ocr_languages,
             diarize=diarize,
-            hf_token=hf_token,
+            num_speakers=num_speakers,
             cancel_event=self._cancel_event,
         )
 

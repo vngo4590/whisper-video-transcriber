@@ -46,7 +46,7 @@ class TranscriptionService:
         extract_onscreen: bool = False,
         ocr_languages: list[str] | None = None,
         diarize: bool = False,
-        hf_token: str = "",
+        num_speakers: int = 0,
         on_diarize_stage=None,
         on_log=None,
     ) -> str:
@@ -62,7 +62,7 @@ class TranscriptionService:
             extract_onscreen:      Run OCR on video frames and interleave results.
             ocr_languages:         EasyOCR language codes, e.g. ``["en", "ja"]``.
             diarize:               Run speaker diarization and label each segment.
-            hf_token:              Hugging Face access token (required when diarize=True).
+            num_speakers:          Hint for expected speaker count. 0 = auto-detect.
             on_diarize_stage:      Zero-arg callback fired just before diarization
                                    starts — lets the controller update the sidebar label.
             on_log:                Optional ``(message, level)`` callback.
@@ -93,11 +93,11 @@ class TranscriptionService:
         _log(f"Whisper complete — {seg_count} segment(s) detected", "detail")
 
         # ── Optional: speaker diarization ────────────────────────────────────
-        if diarize and hf_token:
+        if diarize:
             if on_diarize_stage:
                 on_diarize_stage()
             from src.transcription.diarizer import SpeakerDiarizer, assign_speakers
-            diarization = SpeakerDiarizer().diarize(path, hf_token, on_log=on_log)
+            diarization = SpeakerDiarizer().diarize(path, num_speakers=num_speakers, on_log=on_log)
             assign_speakers(result["segments"], diarization)
 
         # ── Optional: on-screen text extraction ──────────────────────────────
