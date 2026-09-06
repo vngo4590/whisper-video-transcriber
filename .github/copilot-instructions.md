@@ -21,7 +21,8 @@ python -c "import src.clips.analyzer" # prompt files load at import time — cat
 
 External requirements: **FFmpeg on PATH** (clip cutting, caption burn-in), an Anthropic API key
 (entered in the UI, persisted via `src/config/settings.py`), and optionally `pyannote.audio` +
-a Hugging Face token for speaker diarization (commented out in `requirements.txt`).
+a Hugging Face token for speaker diarization and `yt-dlp` for YouTube URL import (both commented
+out in `requirements.txt`; each degrades gracefully when absent).
 
 ## Architecture
 
@@ -47,6 +48,14 @@ Chapters are the exception: `App._chapters_worker` calls `src/analysis/chapters.
 instead of going through a controller.
 
 ## Conventions that aren't obvious from one file
+
+**One media chokepoint.** `LeftPanel._selected_path` is a single shared `tk.StringVar` handed to
+every sidebar tab, and each tab reads the current file from it. Anything that produces media must
+therefore resolve to a **local path** and flow through `LeftPanel.select_file()` →
+`FilePicker.set_file()` → `_set_file()`. That is how YouTube fetches (`src/media/downloader.py` →
+`src/controllers/download.py`) become a normal selection without any controller or service knowing
+a URL was involved. Keep new media sources on that path rather than teaching downstream code about
+remote input.
 
 **Threading / UI marshalling.** Workers run on background threads and must never touch widgets.
 Every result crosses back via `self._root.after(0, lambda: ...)` in `App`. `ActivityLogPanel.append`

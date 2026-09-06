@@ -16,6 +16,7 @@ from src.models import DEFAULT_MODEL, WHISPER_MODELS
 import src.ui.theme as T
 from src.ui.theme import SIDEBAR_W
 from src.ui.sidebar.file_picker import FilePicker
+from src.ui.sidebar.url_input import UrlInput
 from src.ui.sidebar.widgets import card, divider, section_label
 from src.ui.sidebar.tabs.transcribe import TranscribeTab
 from src.ui.sidebar.tabs.video_clips import VideoClipsTab
@@ -36,6 +37,8 @@ class LeftPanel:
         on_generate_clips: Forwarded verbatim to VideoClipsTab.
         on_generate_plan:  Forwarded verbatim to ContentPlanTab.
         on_cancel:         Called when the user clicks the Cancel button.
+        on_fetch_url:      Called with ``(url, fetch_mode)`` when the user
+                           submits a validated media URL.
     """
 
     def __init__(
@@ -45,10 +48,12 @@ class LeftPanel:
         on_generate_clips,
         on_generate_plan,
         on_cancel=None,
+        on_fetch_url=None,
     ) -> None:
         self._selected_path = tk.StringVar()
         self._model_var = tk.StringVar(value=settings.get("whisper_model", DEFAULT_MODEL))
         self._on_cancel = on_cancel
+        self._on_fetch_url = on_fetch_url
         self._build(parent, on_transcribe, on_generate_clips, on_generate_plan)
 
     # ------------------------------------------------------------------
@@ -58,10 +63,16 @@ class LeftPanel:
     def set_busy(self, busy: bool) -> None:
         """Disable or enable all interactive widgets during processing."""
         self._file_picker.set_busy(busy)
+        self._url_input.set_busy(busy)
         self._transcribe_tab.set_busy(busy)
         self._clips_tab.set_busy(busy)
         self._plan_tab.set_busy(busy)
         self._model_menu.config(state="disabled" if busy else "readonly")
+
+    def select_file(self, path: str) -> None:
+        """Make *path* the active selection, as if chosen from disk."""
+        self._file_picker.set_file(path)
+        self._url_input.clear()
 
     def show_loading(self, visible: bool) -> None:
         """Toggle the progress bar, status label, and Cancel button."""
@@ -131,6 +142,9 @@ class LeftPanel:
 
         # Shared: file picker
         self._file_picker = FilePicker(inner, self._selected_path)
+
+        # URL import — rendered inside the FILE section, under the file card
+        self._url_input = UrlInput(self._file_picker.url_host, self._handle_fetch_url)
 
         # Shared: Whisper model (used by both tabs)
         section_label(inner, "WHISPER MODEL")
@@ -216,3 +230,8 @@ class LeftPanel:
         self._cancel_button.config(state="disabled")
         if self._on_cancel:
             self._on_cancel()
+
+    def _handle_fetch_url(self, url: str, fetch_mode) -> None:
+        """Forward a validated URL upward; the App resolves the destination folder."""
+        if self._on_fetch_url:
+            self._on_fetch_url(url, fetch_mode)

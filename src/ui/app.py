@@ -7,18 +7,27 @@ DIP: App depends on abstract callbacks/interfaces, not on concrete
      widget internals from either panel.
 """
 
+import os
 import threading
 import tkinter as tk
-from tkinter import messagebox, ttk
+from tkinter import filedialog, messagebox, ttk
 
 from src.analysis.chapters import generate_chapters
 from src.clips.analyzer import ClipAnalyzer
 from src.config import settings
 from src.controllers.clips import ClipsController
 from src.controllers.content_plan import ContentPlanController
+from src.controllers.download import DownloadController
 from src.controllers.transcription import TranscriptionController
 from src.transcription.file_handler import FileHandler
-from src.models import ClipResult, DEFAULT_CLAUDE_MODEL, WINDOW_SIZE, WINDOW_TITLE
+from src.models import (
+    AnalysisStrategy,
+    ClipResult,
+    DEFAULT_CLAUDE_MODEL,
+    SUPPORTED_AUDIO_EXTENSIONS,
+    WINDOW_SIZE,
+    WINDOW_TITLE,
+)
 from src.transcription.service import TranscriptionService
 from src.ui.panels.activity_log import ActivityLogPanel
 from src.ui.panels.chapters import ChaptersPanel
@@ -102,6 +111,15 @@ class App:
             on_log=self._on_log,
         )
 
+        self._download_controller = DownloadController(
+            on_start=self._on_fetch_start,
+            on_success=self._on_fetch_success,
+            on_error=self._on_error,
+            on_done=self._on_done,
+            on_log=self._on_log,
+            on_stage=self._on_fetch_stage,
+        )
+
         self._build_layout()
         self._bind_shortcuts()
 
@@ -137,6 +155,7 @@ class App:
             on_generate_clips=self._on_generate_clips_requested,
             on_generate_plan=self._on_generate_plan_requested,
             on_cancel=self._on_cancel_requested,
+            on_fetch_url=self._on_fetch_url_requested,
         )
 
         self._notebook = ttk.Notebook(right_frame, style="Dark.TNotebook")
@@ -223,6 +242,92 @@ class App:
         self._cancel_event.set()
 
     # ------------------------------------------------------------------
+    # Private — audio-only guard
+    # ------------------------------------------------------------------
+
+    # Strategies that read pixels and therefore cannot run on an audio file.
+    _VISUAL_STRATEGIES = frozenset({
+        AnalysisStrategy.VISUAL_MOTION,
+        AnalysisStrategy.VISION_MODEL,
+    })
+
+    @staticmethod
+    def _is_audio_only(path: str) -> bool:
+        """True when *path* carries no video track, judged by its extension."""
+        return os.path.splitext(path)[1].lower() in SUPPORTED_AUDIO_EXTENSIONS
+
+    def _blocked_by_audio_only(self, path: str, feature: str) -> bool:
+        """
+        Warn and return True when *feature* needs video but *path* is audio.
+
+        Catches this up front instead of letting it fail deep inside OpenCV,
+        which happens both for an audio-only fetch and for a local .mp3.
+        """
+        if not path or not self._is_audio_only(path):
+            return False
+        messagebox.showwarning(
+            "Video required",
+            f"{feature} needs a video track, but the selected file is audio only:\n"
+            f"{os.path.basename(path)}\n\n"
+            "Select a video file, or fetch the URL again with “Audio only” unchecked.",
+        )
+        return True
+
+    # ------------------------------------------------------------------
+    # Private — URL fetch callbacks
+    # ------------------------------------------------------------------
+
+    def _on_fetch_url_requested(self, url: str, fetch_mode) -> None:
+        # The destination must be resolved here, on the main thread: Tk dialogs
+        # must never be opened from a worker thread.
+        dest_dir = self._resolve_download_dir()
+        if not dest_dir:
+            return
+        self._start_job()
+        self._download_controller.run(
+            url, dest_dir, fetch_mode, cancel_event=self._cancel_event,
+        )
+
+    def _resolve_download_dir(self) -> str:
+        """
+        Return a usable download folder, asking for one the first time.
+
+        Because transcripts and clip folders are written beside their source
+        media, this folder also decides where every later output lands.
+        """
+        configured = settings.get("download_dir", "")
+        if configured and os.path.isdir(configured) and os.access(configured, os.W_OK):
+            return configured
+        if configured:
+            messagebox.showwarning(
+                "Download folder unavailable",
+                f"This folder can no longer be used:\n{configured}\n\nChoose a different one.",
+            )
+        chosen = filedialog.askdirectory(
+            title="Choose a folder for downloaded media", mustexist=True,
+        )
+        if not chosen:
+            return ""
+        if not os.access(chosen, os.W_OK):
+            messagebox.showerror(
+                "Folder not writable",
+                f"This folder cannot be written to:\n{chosen}",
+            )
+            return ""
+        settings.save(download_dir=chosen)
+        return chosen
+
+    def _on_fetch_start(self):
+        self._left.set_busy(True)
+        self._left.show_loading(True)
+
+    def _on_fetch_stage(self, text: str):
+        self._root.after(0, lambda: self._left.set_stage(text))
+
+    def _on_fetch_success(self, path: str):
+        self._root.after(0, lambda: self._left.select_file(path))
+
+    # ------------------------------------------------------------------
     # Private — transcription callbacks
     # ------------------------------------------------------------------
 
@@ -231,6 +336,8 @@ class App:
         extract_onscreen=False, ocr_languages=None, diarize=False, num_speakers=0,
     ):
         self._current_source_path = path
+        if extract_onscreen and self._blocked_by_audio_only(path, "On-screen text extraction"):
+            return
         self._start_job()
         self._transcription_controller.run(
             path, model_name, export_format, do_translate, max_words_per_line,
@@ -268,6 +375,8 @@ class App:
         raw_cuts=False,
         raw_cuts_padding=1.0,
     ):
+        if self._blocked_by_audio_only(path, "Video Clips"):
+            return
         self._start_job()
         self._clips.reset()
         self._clips.set_source_path(path)
@@ -304,6 +413,9 @@ class App:
         self, path, model_name, api_key, claude_model,
         focus, max_highlights, context, analysis_strategies,
     ):
+        if set(analysis_strategies or ()) & self._VISUAL_STRATEGIES:
+            if self._blocked_by_audio_only(path, "Visual analysis"):
+                return
         self._start_job()
         self._plan_panel.reset()
         self._plan_controller.run(

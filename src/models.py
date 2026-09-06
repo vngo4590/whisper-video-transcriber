@@ -241,3 +241,36 @@ MEDIA_FILE_TYPES = [
     ("Audio files", "*.mp3 *.wav *.m4a *.flac *.ogg"),
     ("All files",   "*.*"),
 ]
+
+
+# ---------------------------------------------------------------------------
+# Remote media import  (paste a video URL)
+# ---------------------------------------------------------------------------
+
+class FetchMode(Enum):
+    VIDEO      = "video"        # full video + audio, merged to mp4
+    AUDIO_ONLY = "audio_only"   # audio stream only — faster, transcript-only
+
+FETCH_MODE_LABELS: dict[FetchMode, str] = {
+    FetchMode.VIDEO:      "Video + audio  (mp4)",
+    FetchMode.AUDIO_ONLY: "Audio only  (faster)",
+}
+
+# Video is the default: Clips, OCR, and the visual/vision analysis strategies
+# all need real pixels, so an audio-only default would silently fail the moment
+# the user switched tabs.
+DEFAULT_FETCH_MODE = FetchMode.VIDEO
+
+# yt-dlp format selectors. Video prefers streams that remux into mp4 without a
+# re-encode; SUPPORTED_VIDEO_EXTENSIONS holds only ".mp4", so a .webm/.mkv
+# result would silently disable thumbnails and video detection.
+DOWNLOAD_VIDEO_FORMAT = "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best"
+DOWNLOAD_AUDIO_FORMAT = "bestaudio[ext=m4a]/bestaudio/best"
+
+# Forced container / codec so the result always lands on a supported extension.
+DOWNLOAD_VIDEO_CONTAINER = "mp4"    # → ".mp4", in SUPPORTED_VIDEO_EXTENSIONS
+DOWNLOAD_AUDIO_CODEC     = "m4a"    # → ".m4a", in SUPPORTED_AUDIO_EXTENSIONS
+
+# Log download progress no more often than this, in percentage points, so the
+# yt-dlp progress hook does not flood the activity log's event-loop marshalling.
+DOWNLOAD_PROGRESS_LOG_STEP = 10

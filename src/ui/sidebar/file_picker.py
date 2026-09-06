@@ -55,6 +55,15 @@ class FilePicker:
     def set_busy(self, busy: bool) -> None:
         self._browse_button.config(state="disabled" if busy else "normal")
 
+    def set_file(self, path: str) -> None:
+        """Select *path* as if the user had chosen it from disk."""
+        self._set_file(path)
+
+    @property
+    def url_host(self) -> tk.Frame:
+        """Container reserved for the URL controls, inside the FILE section."""
+        return self._url_host
+
     # ------------------------------------------------------------------
     # Private — build
     # ------------------------------------------------------------------
@@ -99,6 +108,11 @@ class FilePicker:
                 file_card.dnd_bind("<<Drop>>", self._on_drop)
             except Exception:
                 pass
+
+        # Reserved for the URL controls so they render inside the FILE section,
+        # between the file card and the recent-files list. Filled by LeftPanel.
+        self._url_host = tk.Frame(parent, bg=T.C_SIDEBAR)
+        self._url_host.pack(fill="x", pady=(6, 0))
 
         # Recent files section
         self._recent_frame_outer = tk.Frame(parent, bg=T.C_SIDEBAR)
