@@ -1,29 +1,32 @@
 # Core AI / transcription
 openai-whisper>=20250625
-anthropic>=0.91.0
+anthropic>=1.4.0
 
 # Video / audio processing
 ffmpeg-python>=0.2.0
-opencv-python>=4.13.0.92
+opencv-python>=5.0.0.93
 
 # Image processing
-Pillow>=12.1.0
+Pillow>=12.3.0
 
 # Numerical computing (required by whisper, easyocr, opencv)
-numpy>=2.3.5
-scipy>=1.10.0
+numpy>=2.5.2
+scipy>=1.18.1
 
 # OCR — on-screen text extraction
 easyocr>=1.7.2
 
 # Drag-and-drop file support for tkinter
-tkinterdnd2>=0.4.3
+tkinterdnd2>=0.6.3
 
 # Deep learning backend (required by whisper and easyocr)
-torch>=2.11.0
-torchvision>=0.26.0
+# CPU builds come from the PyTorch index; keep the four in step with each other:
+#   pip install -U --index-url https://download.pytorch.org/whl/cpu \
+#       torch torchvision torchaudio torchcodec
+torch>=2.14.0
+torchvision>=0.29.0
 torchaudio
-torchcodec>=0.11.1
+torchcodec>=0.16.0
 
 # Optional — speaker diarization (requires a Hugging Face token and
 # access to the gated pyannote/speaker-diarization-3.1 model)
