@@ -1,6 +1,6 @@
 ---
 name: read-analysis
-description: Explain the src/analysis package: the strategy dispatcher plus audio-energy, visual-motion, vision-model, content-plan, and chapter analysis. Use when adding or changing an AnalysisStrategy.
+description: "Explain the src/analysis package: the strategy dispatcher plus audio-energy, visual-motion, vision-model, content-plan, and chapter analysis. Use when adding or changing an AnalysisStrategy."
 ---
 
 Read and explain the analysis package: `src/analysis/`.

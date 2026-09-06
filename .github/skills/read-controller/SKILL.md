@@ -1,6 +1,6 @@
 ---
 name: read-controller
-description: Explain all controllers in src/controllers: threading model, callback contract, stage numbering, and OperationCancelledError. Use when adding a workflow or changing background-job behaviour.
+description: "Explain all controllers in src/controllers: threading model, callback contract, stage numbering, and OperationCancelledError. Use when adding a workflow or changing background-job behaviour."
 ---
 
 Read and explain all three controllers in `src/controllers/`.

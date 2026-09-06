@@ -1,6 +1,6 @@
 ---
 name: read-all
-description: Give a full architectural overview of the whole project: module map, SOLID/GRASP roles, and the end-to-end flow of all four operations. Use when onboarding or making cross-cutting changes.
+description: "Give a full architectural overview of the whole project: module map, SOLID/GRASP roles, and the end-to-end flow of all four operations. Use when onboarding or making cross-cutting changes."
 ---
 
 Give a full architectural overview of this project.

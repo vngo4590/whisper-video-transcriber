@@ -1,6 +1,6 @@
 ---
 name: read-transcriber
-description: Explain the src/transcription package: Whisper service, OCR extractor, diarizer, merger, and SRT utilities. Use when changing transcription, on-screen text, or speaker labelling.
+description: "Explain the src/transcription package: Whisper service, OCR extractor, diarizer, merger, and SRT utilities. Use when changing transcription, on-screen text, or speaker labelling."
 ---
 
 Read and explain the transcription package: `src/transcription/`.

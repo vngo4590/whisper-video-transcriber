@@ -1,6 +1,6 @@
 ---
 name: read-ui
-description: Explain every module under src/ui: App wiring, theme, sidebar tabs, and right-panel tabs. Use when adding a tab, widget, keyboard shortcut, or changing UI wiring.
+description: "Explain every module under src/ui: App wiring, theme, sidebar tabs, and right-panel tabs. Use when adding a tab, widget, keyboard shortcut, or changing UI wiring."
 ---
 
 Read and explain all UI modules across `src/ui/`.

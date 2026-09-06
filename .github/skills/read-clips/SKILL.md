@@ -1,6 +1,6 @@
 ---
 name: read-clips
-description: Explain the src/clips pipeline: ClipAnalyzer (Claude API), VideoCutter (ffmpeg), and word_refiner. Use when working on clip detection, cutting, aspect ratios, or caption burn-in.
+description: "Explain the src/clips pipeline: ClipAnalyzer (Claude API), VideoCutter (ffmpeg), and word_refiner. Use when working on clip detection, cutting, aspect ratios, or caption burn-in."
 ---
 
 Read and explain the clips pipeline: `src/clips/`.
